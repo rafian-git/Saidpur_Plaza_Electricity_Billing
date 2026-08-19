@@ -47,8 +47,8 @@ def role_required(allowed_roles):
     return decorator
 
 # অ্যাপ শুরুর সময় ডেটাবেজ চেক
-#if not os.path.exists(DB_PATH):
-#    init_db()
+if not os.path.exists(DB_PATH):
+    init_db()
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -853,21 +853,39 @@ def bill_collection():
     return render_template('bill_collection.html', bills=processed_bills, search_query=search_query)
 
 @app.route('/report/daily_collection', methods=['GET'])
-@role_required(['admin', 'moderator', 'viewer'])
 def daily_collection():
-    # ইউজার যদি কোনো তারিখ দেয় তা নিন, না হলে আজকের তারিখ
-    selected_date = request.args.get('date', datetime.now().strftime('%d-%m-%Y'))
+    selected_date = request.args.get('date')
     
     conn = get_db_connection()
-    # নির্দিষ্ট তারিখের মোট কালেকশন
-    total_row = conn.execute('SELECT SUM(amount) FROM payments WHERE payment_date = ?', (selected_date,)).fetchone()
-    total = total_row[0] if total_row[0] else 0
     
-    # নির্দিষ্ট তারিখের বিস্তারিত রেকর্ড
-    records = conn.execute('SELECT * FROM payments WHERE payment_date = ?', (selected_date,)).fetchall()
+    # যদি কোনো তারিখ সিলেক্ট করা না থাকে, তবে আজকের তারিখ ডিফল্ট ধরবে (DD-MM-YYYY ফরম্যাটে)
+    if not selected_date:
+        search_date = datetime.now().strftime('%d-%m-%Y')
+    else:
+        try:
+            # ইনপুট ফরম্যাট যেকোনোটি হোক না কেন, সেটিকে ডেট অবজেক্টে রূপান্তর করে কাঙ্ক্ষিত ফরম্যাটে (DD-MM-YYYY) নিয়ে আসা
+            for fmt in ('%Y-%m-%d', '%d-%b-%Y', '%d-%m-%Y', '%d-%m-%y'):
+                try:
+                    dt = datetime.strptime(selected_date, fmt)
+                    search_date = dt.strftime('%d-%m-%Y') 
+                    break
+                except ValueError:
+                    continue
+            else:
+                search_date = selected_date
+        except Exception:
+            search_date = selected_date
+
+    # ✅ সমাধান: এখানে selected_date এর পরিবর্তে কনভার்ட் করা 'search_date' দিয়ে কুয়েরি করতে হবে
+    collections = conn.execute("SELECT * FROM payments WHERE payment_date = ?", (search_date,)).fetchall()
+    
+    # পাইথন দিয়ে মোট কালেকশনের পরিমাণ যোগ করা
+    total_collection = sum(row['amount'] for row in collections) if collections else 0.0
+    
     conn.close()
     
-    return render_template('daily_report.html', total=total, records=records, selected_date=selected_date)
+    # টেমপ্লেটে সঠিক ডেটা এবং selected_date এর জায়গায় search_date পাঠাতে পারেন যেন ইনপুটেও ঠিক তারিখ দেখায়
+    return render_template('daily_collection.html', collections=collections, total_collection=total_collection, selected_date=search_date)
 
 # 📅 গ. মাসিক বিলের তথ্য ইনপুট বাটন
 @app.route('/bill/monthly_bill_configuration', methods=['GET', 'POST'])
@@ -1105,27 +1123,29 @@ def customer_dashboard():
                            cust=cust, 
                            bills=bills)
 
-@app.route('/customer/portal/view_bills')
+@app.route('/customer/portal/view_bills') # অথবা আপনার রাউটের নাম অনুযায়ী
 def customer_view_bills():
-    if 'customer_id' not in session:
+    customer_id = session.get('customer_id') # সেশন থেকে আইডি নেওয়া
+    
+    if not customer_id:
         return redirect(url_for('customer_login'))
-
-    c_id = session['customer_id']
+        
     conn = get_db_connection()
-    cust = conn.execute('SELECT connection_status, disconnect_reason FROM customers WHERE customer_id=?', (c_id,)).fetchone()
-
-    bill_history = conn.execute('''
-        SELECT id, bill_month, bill_issue_date, total_payable, status FROM bills
-        WHERE customer_id = ? ORDER BY id DESC LIMIT 24
-    ''', (c_id,)).fetchall()
-
+    
+    # গ্রাহকের তথ্য আনা
+    customer = conn.execute("SELECT * FROM customers WHERE customer_id = ?", (customer_id,)).fetchone()
+    
+    # অতীতের ২৪ মাসের বিলের হিস্ট্রি আনা
+    history = conn.execute('''
+        SELECT * FROM bills 
+        WHERE customer_id = ? 
+        ORDER BY id DESC LIMIT 24
+    ''', (customer_id,)).fetchall()
+    
     conn.close()
     
-    # বিল না থাকলে মেসেজ দেওয়ার ব্যবস্থা
-    if not bill_history:
-        flash('আপনার কোনো বিলের রেকর্ড খুঁজে পাওয়া যায়নি।', 'info')
-
-    return render_template('customer_history.html', bills=bill_history, customer=cust)
+    # অত্যন্ত গুরুত্বপূর্ণ: এখানে 'history=history' পাস করতেই হবে, কারণ আপনার এইচটিএমএলে 'history' লুপ ব্যবহার করা হয়েছে
+    return render_template('customer_view_bills.html', customer=customer, history=history)
 
 @app.route('/customer/portal/payment')
 def payment_portal():
@@ -1209,9 +1229,7 @@ def check_and_fix_database():
         columns = [row[1] for row in cursor.fetchall()]
         if 'trx_id' not in columns:
             conn.execute("ALTER TABLE payments ADD COLUMN trx_id TEXT")
-        if 'status' not in columns:
-            conn.execute("ALTER TABLE payments ADD COLUMN status TEXT DEFAULT 'Paid'")
-        conn.commit()
+            conn.commit()
     except Exception as e:
         print("Database update error:", e)
     conn.close()
@@ -1259,4 +1277,4 @@ def logout():
     return redirect(url_for('login'))
 
 if __name__ == '__main__':
-    app.run(host="0.0.0.0",debug=True, port=5000)
+    app.run(debug=True, port=5000)

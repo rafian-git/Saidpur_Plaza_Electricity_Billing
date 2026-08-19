@@ -1,0 +1,102 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <!-- হেডারের অংশ -->
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <div>
+            <h3 class="fw-bold text-primary mb-1">বিল ও পেমেন্ট ইতিহাস</h3>
+            <p class="text-muted mb-0">গ্রাহকের নাম: <strong>{{ customer.owner_name }}</strong> | আইডি: <span class="badge bg-dark">{{ customer.customer_id }}</span></p>
+        </div>
+        <div>
+            <button onclick="window.print()" class="btn btn-outline-dark btn-sm fw-bold">🖨️ পেজ প্রিন্ট করুন</button>
+            <a href="{{ url_for('billing_dashboard') }}" class="btn btn-secondary btn-sm fw-bold">← ড্যাশবোর্ডে ফিরে যান</a>
+        </div>
+    </div>
+    <hr>
+
+    <!-- গ্রাহকের সংক্ষিপ্ত বিবরণ কার্ড -->
+    <div class="row mb-4 g-3">
+        <div class="col-md-3">
+            <div class="p-3 border rounded bg-light">
+                <small class="text-muted d-block">মিটার নাম্বার</small>
+                <span class="fw-bold">{{ customer.meter_no }}</span>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="p-3 border rounded bg-light">
+                <small class="text-muted d-block">প্লাজা / ফ্লোর</small>
+                <span class="fw-bold">{{ customer.plaza_name }} (ফ্লোর: {{ customer.floor_no }})</span>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="p-3 border rounded bg-light">
+                <small class="text-muted d-block">ব্লক ও দোকান নং</small>
+                <span class="fw-bold">ব্লক: {{ customer.block_no }}, দোকান: {{ customer.shop_no }}</span>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="p-3 border rounded bg-light">
+                <small class="text-muted d-block">মোবাইল নাম্বার</small>
+                <span class="fw-bold">{{ customer.phone or 'প্রযোজ্য নয়' }}</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- বিলের ইতিহাস ও প্রিন্ট করার টেবিল -->
+    <div class="card shadow-sm border-0">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-striped table-bordered table-hover mb-0 align-middle">
+                    <thead class="table-dark text-center">
+                        <tr>
+                            <th>মাস</th>
+                            <th>ইউনিট</th>
+                            <th>মোট বিল</th>
+                            <th>অবস্থা</th>
+                            <th>অ্যাকশন (প্রিন্ট / দেখুন)</th>
+                        </tr>
+                    </thead>
+                    <tbody class="text-center">
+                        {% for bill in history %}
+                        <tr>
+                            <td class="fw-bold">{{ bill.bill_month }}</td>
+                            <td>{{ bill.units_consumed }}</td>
+                            <td class="text-danger fw-bold">{{ bill.total_payable }} ৳</td>
+                            <td>
+                                {% if bill.status == 'Paid' %}
+                                    <span class="badge bg-success">পরিশোধিত</span>
+                                {% else %}
+                                    <span class="badge bg-danger">বকেয়া</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <!-- প্রতিটি বিল আলাদাভাবে দেখার এবং প্রিন্ট করার বাটন -->
+                                <a href="{{ url_for('view_bill', bill_id=bill.id) }}" target="_blank" class="btn btn-view-bill btn-sm rounded-pill px-3">
+                                    👁️ বিল দেখুন
+                                </a>
+                                <a href="{{ url_for('view_bill', bill_id=bill.id) }}" target="_blank" class="btn btn-primary btn-sm fw-bold px-3">
+                                    🖨️ বিল প্রিন্ট করুন
+                                </a>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="5" class="text-center text-muted py-4 fw-bold">এই গ্রাহকের কোনো বিলের ইতিহাস নেই।</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    @media print {
+        .btn, .no-print, nav, footer { display: none !important; }
+        body { font-size: 12px; background: white !important; }
+        .card { border: none !important; box-shadow: none !important; }
+    }
+</style>
+{% endblock %}

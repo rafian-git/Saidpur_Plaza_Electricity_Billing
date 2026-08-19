@@ -1,0 +1,260 @@
+{% extends 'base.html' %}
+{% block content %}
+<style>
+    /* পুরো বিলের কন্টেইনার এবং সেকশনগুলোর ব্যাকগ্রাউন্ড একদম সাদা রাখা হলো */
+    #bill-container {
+        background-color: transparent !important;
+    }
+
+    .bill-section {
+        background-color: #ffffff !important;
+        border: 1px solid #ced4da;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.03);
+    }
+
+    @media print {
+        body {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+        }
+        .bill-section {
+            background-color: #ffffff !important;
+        }
+    }
+
+    /* টেবিলের স্টাইল ও প্যাডিং */
+    table td, table th {
+        padding-top: 2px !important;
+        padding-bottom: 2px !important;
+        padding-left: 6px !important;
+        padding-right: 6px !important;
+        line-height: 1.2;
+    }
+
+    table tr {
+        height: 20px;
+    }
+
+    @media print {
+        .footer-copyright {
+            position: fixed;
+            bottom: 5mm;
+            left: 0;
+            width: 100%;
+            text-align: center;
+            font-size: 8px;
+        }
+        body {
+            margin-bottom: 20px;
+        }
+    }
+
+    @media print { 
+        @page { size: A4 landscape; margin: 5mm; } 
+        body { width: 100%; margin: 0; padding: 0; font-size: 12px; } 
+        .container { width: 100%; max-width: 100%; } 
+        table { width: 100%; table-layout: fixed; font-size: 11px; } 
+        .no-print, .btn { display: none !important; } 
+    }
+
+    /* --- কালারফুল টেক্সট ডিজাইন --- */
+    
+    /* ১. হেডার বা টাইটেলের কালার ডিজাইন */
+    .bill-header { 
+        text-align: center; 
+        margin-bottom: 8px; 
+    }
+    .plaza-title {
+        color: #1e3c72; /* গাঢ় নীল */
+        font-size: 15px;
+        font-weight: bold;
+        margin: 0;
+    }
+    .plaza-subtitle {
+        color: #555555; /* ছাই রঙ */
+        font-size: 12px;
+        margin: 2px 0;
+    }
+    .bill-type-title {
+        color: #d9534f; /* আকর্ষণীয় লালচে বা মেরুন টাইপ */
+        font-size: 13px;
+        font-weight: bold;
+        margin-top: 4px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    /* ২. বিল লেআউট ও টেবিল টেক্সট কালার */
+    .bill-wrapper { 
+        display: flex; 
+        justify-content: space-between; 
+        gap: 20px; 
+        font-family: Arial, sans-serif; 
+    }
+    .bill-section { 
+        width: 48%; 
+        padding: 12px; 
+        box-sizing: border-box; 
+    }
+    .bill-table { 
+        width: 100%; 
+        border-collapse: collapse; 
+        margin-top: 6px; 
+        table-layout: fixed; 
+    }
+    .bill-table td { 
+        border: 1px solid #dcdcdc; 
+        font-size: 11px; 
+        word-wrap: break-word; 
+        color: #333333; /* মূল লেখার রঙ গাঢ় ধূসর/কালো */
+    }
+    
+    /* লেবেলগুলোর জন্য আলাদা হালকা প্রফেশনাল কালার */
+    .lbl-text {
+        color: #495057;
+        font-weight: 500;
+    }
+    /* ভ্যালু বা ডেটার জন্য গাঢ় কালার */
+    .val-text {
+        color: #000000;
+        font-weight: 600;
+    }
+    
+    /* বিশেষ প্রদেয় অ্যামাউন্ট হাইলাইট কালার */
+    .highlight-amount {
+        color: #b71c1c !important; /* ডিপ লাল */
+        font-size: 12px;
+    }
+
+    /* ৩. নিচের নোটের লেখা (অন্য কালার) */
+    .footer-note { 
+        font-size: 10px; 
+        margin-top: 8px; 
+        border: 1px dashed #b0bec5; 
+        background-color: #f8f9fa; /* একদম হালকা অফ-হোয়াইট ব্যাকগ্রাউন্ড */
+        color: #37474f; /* স্লেট ব্লু টাইপ নোটের কালার */
+        padding: 6px; 
+        min-height: 35px; 
+        border-radius: 4px;
+    }
+    .footer-note b, .footer-note span {
+        color: #c62828; /* নোটের ভেدی পয়েন্ট বা রুলসগুলো সুন্দর দেখানোর জন্য */
+    }
+
+    /* ৪. স্বাক্ষর অংশ */
+    .signatures { 
+        display: flex; 
+        justify-content: space-between; 
+        margin-top: 35px; 
+        font-size: 10px; 
+        text-align: center; 
+        color: #263238;
+    }
+</style>
+
+<div class="no-print text-center my-3"><button onclick="window.print()" class="btn btn-primary fw-bold px-4">🖨️ প্রিন্ট করুন</button></div>
+
+<div id="bill-container" class="bill-wrapper">
+    {% for title in ['গ্রাহক কপি', 'অফিস কপি'] %}
+    <div class="bill-section">
+        <div class="bill-header">
+            <p class="plaza-title">সৈয়দপুর প্লাজা সুপার মার্কেট</p>
+            <p class="plaza-subtitle">সৈয়দপুর, নীলফামারী।</p>
+            <p class="bill-type-title">⚡ বিদ্যুৎ বিল - {{ title }}</p>
+        </div>
+
+        <!-- QR কোড সেকশন -->
+        <div class="qr-section text-center my-2">
+            <img src="{{ url_for('generate_qr', c_id=bill['customer_id'], amount=bill['total_payable']) }}" 
+                 alt="QR Code" style="width: 85px; height: 85px; border: 1px solid #eee; padding: 2px;">
+            <p style="font-size: 9px; color: #6c757d; margin: 2px 0 0 0;">স্ক্যান করে পরিশোধ করুন</p>
+        </div>
+
+        <table class="bill-table">
+            <tr>
+                <td class="lbl-text">মিটার নাম্বার:</td><td class="val-text">{{ bill.meter_no }}</td>
+                <td class="lbl-text">ইস্যু তারিখ:</td><td class="val-text">{{ bill.bill_issue_date }}</td>
+            </tr>
+            <tr>
+                <td class="lbl-text">গ্রাহক আইডি:</td><td class="val-text text-primary">{{ bill.customer_id }}</td>
+                <td class="lbl-text">শেষ তারিখ:</td><td class="val-text text-danger">{{ bill.due_date }}</td>
+            </tr>
+            <tr>
+                <td class="lbl-text">গ্রাহক নাম:</td><td class="val-text">{{ bill.owner_name }}</td>
+                <td class="lbl-text">বিল নং:</td><td class="val-text">{{ bill.id }}</td>
+            </tr>
+            <tr>
+                <td class="lbl-text">প্লাজার নাম:</td><td class="val-text">{{ bill.plaza_name }}</td>
+                <td class="lbl-text">ফ্লোর নং:</td><td class="val-text">{{ bill.floor_no }}</td>
+            </tr>
+            <tr>
+                <td class="lbl-text">ব্লক নং:</td><td class="val-text">{{ bill.block_no }}</td>
+                <td class="lbl-text">দোকান নং:</td><td class="val-text">{{ bill.shop_no }}</td>
+            </tr>
+            <tr>
+                <td class="lbl-text">বর্তমান রিডিং:</td><td class="val-text">{{ bill.current_reading }}</td>
+                <td class="lbl-text">তারিখ:</td><td class="val-text">{{ bill.curr_reading_date }}</td>
+            </tr>
+            <tr>
+                <td class="lbl-text">পূর্ববর্তী রিডিং:</td><td class="val-text">{{ bill.previous_reading }}</td>
+                <td class="lbl-text">তারিখ:</td><td class="val-text">{{ bill.prev_reading_date }}</td>
+            </tr>
+            <tr>
+                <td class="lbl-text">বাবহৃত ইউনিট:</td><td class="val-text">{{ bill.units_consumed }}</td>
+                <td class="lbl-text">প্রতি ইউনিট রেট:</td><td class="val-text">{{ bill.unit_rate }}</td>
+            </tr>
+            <tr>
+                <td class="lbl-text">এনার্জি চার্জ:</td><td class="val-text">{{ bill.energy_charge }}</td>
+                <td class="lbl-text">ডিমান্ড চার্জ:</td><td class="val-text">{{ bill.demand_charge }}</td>
+            </tr>
+            <tr>
+                <td class="lbl-text">ভ্যাট (VAT):</td><td class="val-text">{{ "%.2f"|format(bill.vat|float) }}</td>
+                <td class="lbl-text">বিবিধ চার্জ:</td><td class="val-text">{{ bill.misc_charge }}</td>
+            </tr>
+            <tr>
+                <td class="lbl-text">চলতি মাসের মোট:</td><td class="val-text">{{ "%.2f"|format(bill.current_month_total|float) }}</td>
+                <td class="lbl-text">বকেয়া:</td><td class="val-text text-warning-dark">{{ bill.arrears }}</td>
+            </tr>
+            
+            <tr>
+                <td colspan="2" class="lbl-text">মোট পরিশোধযোগ্য (বিনা জরিমানায়):</td>
+                <td colspan="2"><strong class="highlight-amount">{{ bill.total_payable }} ৳</strong></td>
+            </tr>
+            <tr>
+                <td colspan="2" class="lbl-text">বিলম্ব মাশুল (Late Fee):</td>
+                <td colspan="2" class="val-text text-danger">{{ bill.late_fee }}</td>
+            </tr>
+            <tr>
+                <td colspan="2" class="lbl-text">বিল পরিশোধের শেষ তারিখের পর মোট:</td>
+                <td colspan="2"><strong class="highlight-amount">{{ bill.total_payable_after_due }} ৳</strong></td>
+            </tr>
+        </table>
+        
+        <!-- কালারফুল নোট সেকশন -->
+        <div class="footer-note">
+            <span style="font-weight: bold; color: #d32f2f;">নির্দেশাবলী:</span><br>
+            ১. {{ config['note_1'] if config and config['note_1'] else 'নির্দিষ্ট সময়ের মধ্যে বিল পরিশোধ করুন।' }}<br>
+            ২. {{ config['note_2'] if config and config['note_2'] else 'বিলম্ব হলে জরিমানা প্রযোজ্য হবে।' }}<br>
+            ৩. {{ config['note_3'] if config and config['note_3'] else 'যেকোনো প্রয়োজনে অফিস কর্তৃপক্ষের সাথে যোগাযোগ করুন।' }}
+        </div>
+        
+        <!-- সিগনেচার সেকশন -->
+        <div class="signatures">
+            <div style="border-top: 1px solid #78909c; padding-top: 4px; width: 30%;">
+                <span style="color: #37474f;">{{ username }}</span><br>
+                <strong style="color: #455a64; font-size: 9px;">বিল প্রস্তুতকারী</strong>
+            </div>
+            <div style="border-top: 1px solid #78909c; padding-top: 4px; width: 30%;">
+                <span style="color: #78909c;">__________</span><br>
+                <strong style="color: #455a64; font-size: 9px;">বিল যাচাইকারী</strong>
+            </div>
+            <div style="border-top: 1px solid #78909c; padding-top: 4px; width: 30%;">
+                <span style="color: #78909c;">__________</span><br>
+                <strong style="color: #455a64; font-size: 9px;">গ্রহীতা</strong>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}

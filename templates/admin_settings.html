@@ -1,0 +1,85 @@
+{% extends 'base.html' %}
+
+{% block title %}সিস্টেম সেটিংস - ইউজার ম্যানেজমেন্ট{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="card p-4 shadow-sm border-0 rounded-4">
+        <h3 class="fw-bold text-primary mb-4">🛡️ ইউজার ম্যানেজমেন্ট</h3>
+        
+        <!-- ইউজার যোগ করার ফর্ম -->
+        <form action="{{ url_for('admin_settings') }}" method="POST" class="mb-5 p-4 bg-light rounded-4 border">
+            <input type="hidden" name="action" value="add">
+            <div class="row g-3 align-items-end">
+                <div class="col-md-3">
+                    <label class="fw-bold">ইউজারনেম</label>
+                    <input type="text" name="username" class="form-control" required>
+                </div>
+                <div class="col-md-3">
+                    <label class="fw-bold">পাসওয়ার্ড</label>
+                    <input type="password" name="password" class="form-control" required>
+                </div>
+                <div class="col-md-3">
+                    <label class="fw-bold">রোল নির্ধারণ করুন</label>
+                    <!-- name="user_role" করা হয়েছে যাতে পাইথন কোডের সাথে মিলে -->
+                    <select name="user_role" class="form-select">
+                        <option value="moderator">moderator</option>
+                        <option value="viewer">viewer</option>
+                        <option value="admin">admin</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <button type="submit" class="btn btn-success w-100 fw-bold">➕ ইউজার যোগ করুন</button>
+                </div>
+            </div>
+        </form>
+
+        <!-- কিউআর কোড ফর্মটি মেইন ফর্মের বাইরে নিয়ে আসা হয়েছে -->
+        <div class="card p-4 mb-4">
+            <h5 class="fw-bold">পেমেন্ট কিউআর কোড আপডেট</h5>
+            <form action="{{ url_for('upload_qr_code') }}" method="POST" enctype="multipart/form-data">
+                <input type="file" name="qr_image" accept="image/*" required>
+                <button type="submit" class="btn btn-primary btn-sm">আপলোড করুন</button>
+            </form>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-hover table-striped align-middle border">
+                <thead class="table-dark">
+                    <tr>
+                        <th>ইউজারনেম</th>
+                        <th>রোল</th>
+                        <th>নতুন পাসওয়ার্ড</th>
+                        <th class="text-center">অ্যাকশন</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for user in users %}
+                    <tr>
+                        <form action="{{ url_for('admin_settings') }}" method="POST">
+                            <input type="hidden" name="username" value="{{ user.username }}">
+                            <td><strong>{{ user.username }}</strong></td>
+                            <td>
+                                <!-- name="role" ঠিক আছে, কারণ আপডেটের সময় আপনি এটিই ব্যবহার করছেন -->
+                                <select name="role" class="form-select form-select-sm">
+                                    <option value="admin" {% if user.role == 'admin' %}selected{% endif %}>এডমিন</option>
+                                    <option value="moderator" {% if user.role == 'moderator' %}selected{% endif %}>মডারেটর</option>
+                                    <option value="viewer" {% if user.role == 'viewer' %}selected{% endif %}>ভিউয়ার</option>
+                                </select>
+                            </td>
+                            <td>
+                                <input type="password" name="password" placeholder="পরিবর্তন করতে টাইপ করুন" class="form-control form-control-sm">
+                            </td>
+                            <td class="text-center">
+                                <button type="submit" name="action" value="update" class="btn btn-primary btn-sm px-3">আপডেট</button>
+                                <button type="submit" name="action" value="delete" class="btn btn-danger btn-sm px-3" onclick="return confirm('মুছে ফেলতে চান?');">মুছে ফেলুন</button>
+                            </td>
+                        </form>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

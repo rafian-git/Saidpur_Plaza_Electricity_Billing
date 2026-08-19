@@ -1,0 +1,111 @@
+{% extends 'base.html' %}
+{% block title %}গ্রাহক ম্যানেজমেন্ট{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="fw-bold">🧑‍🤝‍🧑 গ্রাহক ম্যানেজমেন্ট</h2>
+    <input type="text" id="customerSearch" class="form-control w-25" placeholder="🔍 আইডি বা নাম দিয়ে খুঁজুন...">
+</div>
+
+<div class="card p-4 mb-5 shadow-sm border-0">
+    <h5 class="mb-3 text-primary fw-bold">নতুন গ্রাহক যোগ করুন</h5>
+    <form action="/customer/manage" method="POST">
+        <input type="hidden" name="action" value="add">
+        <div class="row g-3">
+            <div class="col-md-3"><input type="text" name="customer_id" class="form-control" placeholder="গ্রাহক আইডি" required></div>
+            <div class="col-md-3"><input type="text" name="owner_name" class="form-control" placeholder="মালিকের নাম" required></div>
+            <div class="col-md-3"><input type="text" name="meter_no" class="form-control" placeholder="মিটার নং" required></div>
+            <div class="col-md-3"><input type="text" name="plaza_name" class="form-control" placeholder="প্লাজার নাম" required></div>
+            <div class="col-md-3"><input type="text" name="floor_no" class="form-control" placeholder="ফ্লোর নং" required></div>
+            <div class="col-md-3"><input type="text" name="block_no" class="form-control" placeholder="ব্লক নং" required></div>
+            <div class="col-md-3"><input type="text" name="shop_no" class="form-control" placeholder="দোকান নং"></div>
+            <div class="col-md-3"><input type="number" step="0.01" name="unit_rate" class="form-control" placeholder="ইউনিট রেট"></div>
+            <div class="col-md-2"><input type="number" step="0.01" name="allocated_load" class="form-control" placeholder="লোড (KW)"></div>
+            <div class="col-md-2"><input type="number" step="0.01" name="rate_per_kw" class="form-control" placeholder="রেট/KW"></div>
+            <div class="col-md-3"><input type="number" step="0.01" name="initial_reading" class="form-control" placeholder="প্রাথমিক রিডিং"></div>
+            <div class="col-md-3">
+                <select name="connection_status" class="form-control" required>
+                    <option value="Active">সক্রিয় (Active)</option>
+                    <option value="Disconnected">নিষ্ক্রিয় (Disconnected)</option>
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary w-100 fw-bold">গ্রাহক সেভ করুন</button>
+        </div>
+    </form>
+</div>
+
+<div class="table-responsive shadow-sm rounded">
+    <table class="table table-hover align-middle bg-white" id="customerTable">
+        <thead class="table-primary text-center">
+            <tr>
+                <th>আইডি</th><th>নাম</th><th>মিটার</th><th>দোকান</th><th>অবস্থা</th><th>নিয়ন্ত্রণ</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for cust in customers %}
+            <tr>
+                <td class="fw-bold">{{ cust.customer_id }}</td>
+                <td>{{ cust.owner_name }}</td>
+                <td>{{ cust.meter_no }}</td>
+                <td>{{ cust.shop_no }}</td>
+                <td>
+                    {% if cust.connection_status == 'Active' %}
+                        <span class="badge bg-success rounded-pill">সক্রিয়</span>
+                    {% else %}
+                        <span class="badge bg-danger rounded-pill">নিষ্ক্রিয়</span>
+                    {% endif %}
+                </td>
+                <td>
+                    <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#editModal{{ cust.customer_id }}">এডিট</button>
+                </td>
+            </tr>
+
+            <div class="modal fade" id="editModal{{ cust.customer_id }}" tabindex="-1">
+                <div class="modal-dialog modal-lg"> 
+                    <form action="/customer/manage" method="POST">
+                        <div class="modal-content">
+                            <div class="modal-header bg-primary text-white">
+                                <h5 class="modal-title">এডিট গ্রাহক আইডি: {{ cust.customer_id }}</h5>
+                            </div>
+                            <div class="modal-body">
+                                <input type="hidden" name="action" value="edit">
+                                <input type="hidden" name="customer_id" value="{{ cust.customer_id }}">
+                                <div class="row g-3">
+                                    <div class="col-md-6"><label>মালিকের নাম</label><input type="text" name="owner_name" class="form-control" value="{{ cust.owner_name }}" required></div>
+                                    <div class="col-md-6"><label>মিটার নং</label><input type="text" name="meter_no" class="form-control" value="{{ cust.meter_no }}"></div>
+                                    <div class="col-md-6"><label>দোকান নং</label><input type="text" name="shop_no" class="form-control" value="{{ cust.shop_no }}"></div>
+                                    <div class="col-md-6"><label>ইউনিট রেট</label><input type="number" step="0.01" name="unit_rate" class="form-control" value="{{ cust.unit_rate }}"></div>
+                                    <div class="col-md-6"><label>অনুমোদিত লোড (KW)</label><input type="number" step="0.01" name="allocated_load" class="form-control" value="{{ cust.allocated_load }}"></div>
+                                    <div class="col-md-6"><label>রেট পার KW</label><input type="number" step="0.01" name="rate_per_kw" class="form-control" value="{{ cust.rate_per_kw }}"></div>
+                                    <div class="col-md-6"><label>পূর্ববর্তী/প্রাথমিক রিডিং</label><input type="number" step="0.01" name="initial_reading" class="form-control" value="{{ cust.initial_reading }}"></div>
+                                    <!-- নিচের লাইনটি আপনার ফর্মে যেখানে ইনপুট ফিল্ডগুলো আছে, সেখানে যোগ করুন -->
+                                    <div class="col-md-3">
+                                        <select name="connection_status" class="form-control" required>
+                                            <option value="Active">সক্রিয় (Active)</option>
+                                            <option value="Disconnected">নিষ্ক্রিয় (Disconnected)</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">বন্ধ করুন</button>
+                                <button type="submit" class="btn btn-success">তথ্য আপডেট করুন</button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<script>
+    document.getElementById('customerSearch').onkeyup = function() {
+        let filter = this.value.toLowerCase();
+        let rows = document.querySelectorAll('#customerTable tbody tr');
+        rows.forEach(row => {
+            row.style.display = row.innerText.toLowerCase().includes(filter) ? '' : 'none';
+        });
+    };
+</script>
+{% endblock %}

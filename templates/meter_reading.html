@@ -1,0 +1,92 @@
+{% extends 'base.html' %}
+
+{% block title %}মিটার রিডিং ও বিল তৈরি{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h3 class="fw-bold">⚡ মিটার রিডিং ইনপুট ও এডিট</h3>
+    <input type="text" id="readingSearch" class="form-control w-25" placeholder="🔍 গ্রাহক আইডি বা নাম দিয়ে খুঁজুন...">
+</div>
+
+<div class="table-responsive bg-white p-4 shadow-sm rounded-4">
+    <table class="table table-bordered table-hover align-middle" id="readingTable">
+        <thead class="table-dark text-center">
+            <tr>
+                <th>আইডি</th>
+                <th>নাম</th>
+                <th>পূর্ববর্তী রিডিং</th>
+                <th>বর্তমান রিডিং</th>
+                <th>অ্যাকশন</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for cust in customers %}
+            <tr class="text-center">
+                <td>{{ cust.customer_id }}</td>
+                <td>{{ cust.owner_name }}</td>
+    
+                <!-- পূর্ববর্তী রিডিং -->
+                <td>{{ cust.display_prev_reading or 0 }}</td>
+    
+                <td>
+                    <form action="" method="POST" id="form_{{ cust.customer_id }}">
+                        <input type="hidden" name="customer_id" value="{{ cust.customer_id }}">
+                        
+                        <!-- বিল জেনারেটেড থাকলে ইনপুট ফিল্ড ডিসেবল থাকবে, যদি না এডিট মোড অন করা হয় -->
+                        <input type="number" name="current_reading" id="input_{{ cust.customer_id }}" 
+                                class="form-control text-center" step="0.01" 
+                                value="{{ cust.current_reading or '' }}" 
+                                {% if cust.bill_generated and session.get('role') != 'admin' %}disabled{% elif cust.bill_generated %}disabled{% endif %}
+                                required placeholder="রিডিং লিখুন">
+                </td>
+                <td>
+                    <div class="d-flex gap-1 justify-content-center align-items-center flex-wrap">
+                        {% if cust.bill_generated and cust.latest_bill_id %}
+                            <!-- বিল দেখা ও প্রিন্ট করার বাটন -->
+                            <a href="{{ url_for('view_bill', bill_id=cust.latest_bill_id) }}" class="btn btn-success btn-sm">📄 বিল দেখুন</a>
+                            <a href="{{ url_for('bill_print', bill_id=cust.latest_bill_id) }}" class="btn btn-secondary btn-sm" target="_blank">🖨️ প্রিন্ট</a>
+                            
+                            <!-- শুধুমাত্র অ্যাডমিনের জন্য এডিট বাটন -->
+                            {% if session.get('role') == 'admin' %}
+                                <button type="button" class="btn btn-warning btn-sm fw-bold" onclick="enableEdit('{{ cust.customer_id }}')" id="edit_btn_{{ cust.customer_id }}">✏️ এডিট</button>
+                                <button type="submit" class="btn btn-danger btn-sm d-none" id="save_btn_{{ cust.customer_id }}">💾 আপডেট</button>
+                            {% endif %}
+                        {% else %}
+                            <!-- নতুন বিল তৈরির সাবমিট বাটন -->
+                            <button type="submit" class="btn btn-primary btn-sm px-3">বিল তৈরি করুন</button>
+                        {% endif %}
+                    </div>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<script>
+    // লাইভ সার্চ ফাংশন
+    document.getElementById('readingSearch').onkeyup = function() {
+        let filter = this.value.toLowerCase();
+        let rows = document.querySelectorAll('#readingTable tbody tr');
+        rows.forEach(row => {
+            row.style.display = row.innerText.toLowerCase().includes(filter) ? '' : 'none';
+        });
+    };
+
+    // রিডিং এডিট করার জাভাস্ক্রিপ্ট ফাংশন (শুধুমাত্র অ্যাডমিনের জন্য)
+    function enableEdit(customerId) {
+        let inputField = document.getElementById('input_' + customerId);
+        let editBtn = document.getElementById('edit_btn_' + customerId);
+        let saveBtn = document.getElementById('save_btn_' + customerId);
+
+        // ইনপুট বক্সের ডিজেবল তুলে দেওয়া
+        inputField.removeAttribute('disabled');
+        inputField.focus();
+
+        // এডিট বাটন লুকিয়ে সেভ বা আপডেট বাটন দেখানো
+        editBtn.classList.add('d-none');
+        saveBtn.classList.remove('d-none');
+    }
+</script>
+{% endblock %}

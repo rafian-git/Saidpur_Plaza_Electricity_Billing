@@ -1,0 +1,64 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3>📅 কালেকশন রিপোর্ট: {{ selected_date }}</h3>
+        <button onclick="window.print()" class="btn btn-primary no-print">🖨️ প্রিন্ট রিপোর্ট</button>
+    </div>
+
+    <form method="GET" action="{{ url_for('daily_collection') }}" class="row mb-4 no-print align-items-end">
+        <div class="col-md-3">
+            <label class="form-label">তারিখ পরিবর্তন করুন:</label>
+            <input type="date" name="date" class="form-control" value="{{ selected_date }}" required>
+        </div>
+        <div class="col-md-2">
+            <button type="submit" class="btn btn-primary">ফিল্টার করুন</button>
+        </div>
+    </form>
+
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card bg-success text-white shadow-sm">
+                <div class="card-body">
+                    <h5>মোট কালেকশন</h5>
+                    <h3>৳ {{ "{:,.2f}".format(total) }}</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow">
+        <div class="card-body">
+            <table class="table table-striped table-hover">
+                <thead class="table-primary">
+                    <tr>
+                        <th>সময়/আইডি</th>
+                        <th>গ্রাহক আইডি</th>
+                        <th>পদ্ধতি</th>
+                        <th>অ্যামাউন্ট</th>
+                        <th>গ্রহণকারী</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for rec in records %}
+                    <tr>
+                        <td>#PAY-{{ rec.id }}</td>
+                        <td>{{ rec.customer_id }}</td>
+                        <td><span class="badge bg-secondary">{{ rec.payment_method }}</span></td>
+                        <td class="fw-bold">৳ {{ "{:,.2f}".format(rec.amount) }}</td>
+                        <td>{{ rec.received_by }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="5" class="text-center text-muted py-4">এই তারিখে কোনো পেমেন্ট রেকর্ড পাওয়া যায়নি।</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    
+    <a href="{{ url_for('dashboard') }}" class="btn btn-secondary mt-3 no-print">ড্যাশবোর্ডে ফিরে যান</a>
+</div>
+{% endblock %}

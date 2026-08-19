@@ -1,0 +1,82 @@
+{% extends 'customer_layout.html' %}
+
+{% block title %}অনলাইন পেমেন্ট - সৈয়দপুর প্লাজা{% endblock %}
+
+{% block content %}
+<style>
+    .payment-card { background: #ffffff; border-radius: 20px; box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1); max-width: 500px; width: 100%; margin: 30px auto; padding: 40px; text-align: center; }
+    .amount-box { background-color: #e8f5e9; border: 2px dashed #28a745; border-radius: 12px; padding: 20px; margin-bottom: 25px; }
+    .amount-value { font-size: 36px; color: #155724; font-weight: 800; }
+    .qr-frame-wrapper { width: 240px; height: 240px; margin: 0 auto 20px auto; border: 5px solid #11998e; border-radius: 16px; overflow: hidden; background: #fff; }
+    .qr-frame-wrapper img { width: 100%; height: 100%; object-fit: contain; }
+    .payment-badge { background-color: #11998e; color: white; padding: 6px 16px; border-radius: 20px; font-size: 13px; font-weight: bold; margin-bottom: 20px; display: inline-block; }
+</style>
+
+<div class="payment-card">
+    <div class="payment-badge">bKash / Nagad / Rocket Supported</div>
+    <h4 class="fw-bold text-dark mb-2">ডিজিটাল পেমেন্ট কাউন্টার</h4>
+    <p class="text-muted small fw-semibold">গ্রাহক আইডি: <span class="text-primary">{{ id }}</span></p>
+
+    <div class="amount-box">
+        <div class="text-muted small fw-bold">পরিশোধযোগ্য মোট বিল</div>
+        <div class="amount-value">{{ amount }} <small style="font-size: 20px;">৳</small></div>
+    </div>
+
+    {% if amount > 0 %}
+        <div class="qr-frame-wrapper">
+            <img src="{{ url_for('static', filename='bangla_qr.jpg') }}" alt="Payment QR" class="img-fluid" style="max-height: 200px;">
+        </div>
+
+        <div class="text-secondary small fw-bold mb-4 px-2">
+            <p class="mb-2 text-dark">১. যেকোনো পেমেন্ট অ্যাপ দিয়ে কিউআর কোডটি স্ক্যান করুন।</p>
+            <p class="mb-0">২. পেমেন্ট সম্পন্ন করে প্রাপ্ত <b>TrxID</b>-টি নোট করে রাখুন।</p>
+        </div>
+
+        <div class="d-grid gap-2">
+            <button type="button" class="btn btn-success btn-lg rounded-pill" data-bs-toggle="modal" data-bs-target="#trxModal">
+                পেমেন্ট আইডি (TrxID) সাবমিট করুন
+            </button>
+        </div>
+    {% else %}
+        <div class="alert alert-success fw-bold py-4 rounded-3">🎉 আলহামদুলিল্লাহ! আপনার কোনো বকেয়া বিল নেই।</div>
+    {% endif %}
+    
+    <div class="mt-4">
+        <a href="{{ url_for('customer_dashboard') }}" class="text-muted fw-semibold text-decoration-none">← ড্যাশবোর্ডে ফিরুন</a>
+    </div>
+</div>
+
+<!-- ট্রানজেকশন আইডি ইনপুট দেওয়ার জন্য পপআপ মডাল (Modal) -->
+<div class="modal fade" id="trxModal" tabindex="-1" aria-labelledby="trxModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content text-start">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title" id="trxModalLabel">ট্রানজেকশন আইডি (TrxID) প্রদান করুন</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            
+            <!-- এখানে bill.id এর পরিবর্তে সরাসরি কাস্টমার আইডি (id) অথবা ব্যাকএন্ড রাউট অনুযায়ী ফর্ম সাবমিট করা হচ্ছে -->
+            <form action="{{ url_for('submit_trxid') }}" method="POST">
+                <div class="modal-body">
+                    <div class="alert alert-warning py-2 mb-3">
+                        <small>সতর্কতা: সঠিক অ্যামাউন্ট (<strong>৳ {{ amount }}</strong>) পরিশোধ করে প্রাপ্ত সঠিক TrxID দিন।</small>
+                    </div>
+                    
+                    <input type="hidden" name="customer_id" value="{{ id }}">
+                    <input type="hidden" name="amount" value="{{ amount }}">
+
+                    <div class="mb-3">
+                        <label for="trx_id" class="form-label fw-bold">বিকাশ/নগদ TrxID লিখুন:</label>
+                        <input type="text" class="form-control form-control-lg text-center" id="trx_id" name="trx_id" placeholder="যেমন: 9N74XYZ..." required style="letter-spacing: 1px; font-weight: bold; text-transform: uppercase;">
+                    </div>
+                </div>
+                
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary rounded-pill px-4" data-bs-dismiss="modal">বাতিল</button>
+                    <button type="submit" class="btn btn-success rounded-pill px-4">কনফার্ম ও সাবমিট করুন</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

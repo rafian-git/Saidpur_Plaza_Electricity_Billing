@@ -1,0 +1,49 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <h2 class="mb-4">📊 বিলিং ড্যাশবোর্ড</h2>
+    
+    <div class="card shadow">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0">গ্রাহক ও বিলিং স্ট্যাটাস</h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover table-bordered">
+                    <thead class="table-light">
+                        <tr>
+                            <th>আইডি</th>
+                            <th>দোকানের নাম</th>
+                            <th>মালিকের নাম</th>
+                            <th>মিটার নম্বর</th>
+                            <th>অবস্থা</th>
+                            <th>একশন</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for cust in customers %}
+                        <tr>
+                            <td>{{ cust.customer_id }}</td>
+                            <td>{{ cust.shop_no }}</td>
+                            <td>{{ cust.owner_name }}</td>
+                            <td>{{ cust.meter_no }}</td>
+                            <td>
+                                {% if cust.connection_status in ['Connected', 'active', 'Active', 'চালু', 'সক্রিয়'] %}
+                                    <span class="badge bg-success">চালু</span>
+                                {% else %}
+                                    <span class="badge bg-danger">বিচ্ছিন্ন</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <a href="{{ url_for('customer_history', c_id=cust.customer_id) }}" class="btn btn-sm btn-info">হিস্ট্রি</a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

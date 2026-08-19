@@ -1,0 +1,29 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container mt-4">
+    <h3>অনলাইন পেমেন্ট যাচাই (Pending)</h3>
+    <table class="table table-bordered mt-3">
+        <thead>
+            <tr>
+                <th>গ্রাহক আইডি</th>
+                <th>ট্রানজেকশন আইডি</th>
+                <th>পরিমাণ</th>
+                <th>অ্যাকশন</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for p in payments %}
+            <tr>
+                <td>{{ p.customer_id }}</td>
+                <td>{{ p.trx_id }}</td>
+                <td>{{ p.amount }} ৳</td>
+                <td>
+                    <a href="{{ url_for('process_payment', payment_id=p.id, action='approve') }}" class="btn btn-success btn-sm fw-bold">এপ্রুভ</a>
+                    <a href="{{ url_for('process_payment', payment_id=p.id, action='reject') }}" class="btn btn-danger btn-sm fw-bold">রিজেক্ট</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

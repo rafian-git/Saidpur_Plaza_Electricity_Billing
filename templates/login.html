@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>লগইন | সৈয়দপুর প্লাজা বিলিং সিস্টেম</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    
+    <style>
+        body { font-family: 'Hind Siliguri', sans-serif; background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+        .login-container { background: #ffffff; border-radius: 16px; box-shadow: 0 15px 35px rgba(0, 0, 0, 0.3); max-width: 450px; width: 100%; padding: 40px; }
+        .plaza-title { color: #1e3c72; font-weight: 700; font-size: 26px; margin-bottom: 5px; }
+        .plaza-subtitle { color: #6c757d; font-size: 14px; font-weight: 600; letter-spacing: 1px; margin-bottom: 30px; }
+        .btn-staff-login { background: #1e3c72; border: none; padding: 12px; font-weight: 600; transition: 0.3s; }
+        .btn-staff-login:hover { background: #122548; transform: translateY(-2px); }
+        .customer-portal-divider { display: flex; align-items: center; text-align: center; margin: 25px 0; color: #a0a0a0; }
+        .customer-portal-divider::before, .customer-portal-divider::after { content: ''; flex: 1; border-bottom: 1px solid #dee2e6; }
+        .btn-customer-portal { background-color: #28a745; color: white; font-weight: 700; padding: 14px; border-radius: 10px; display: block; text-align: center; text-decoration: none; transition: 0.3s; }
+        .btn-customer-portal:hover { background-color: #1e7e34; color: white; transform: translateY(-2px); }
+    </style>
+</head>
+<body>
+
+<div class="login-container">
+    <div class="text-center">
+        <h1 class="plaza-title">সৈয়দপুর প্লাজা</h1>
+        <p class="plaza-subtitle">স্মার্ট বিদ্যুৎ বিলিং ম্যানেজমেন্ট সিস্টেম</p>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }} alert-dismissible fade show text-center" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <form action="{{ url_for('login') }}" method="POST">
+        <div class="mb-3">
+            <label class="form-label fw-bold text-secondary">ইউজারনেম</label>
+            <input type="text" class="form-control form-control-lg" name="username" placeholder="আপনার ইউজারনেম" required autofocus autocomplete="username">
+        </div>
+        <div class="mb-4">
+            <label class="form-label fw-bold text-secondary">পাসওয়ার্ড</label>
+            <div class="input-group">
+                <input type="password" class="form-control form-control-lg" name="password" id="password" placeholder="••••••••" required autocomplete="current-password">
+                <button class="btn btn-outline-secondary" type="button" onclick="togglePassword()" id="toggleBtn"><i class="bi bi-eye"></i></button>
+            </div>
+        </div>
+        <button type="submit" class="btn btn-staff-login w-100 btn-lg text-white rounded-3 mb-2">স্টাফ লগইন করুন 🔓</button>
+    </form>
+
+    <div class="customer-portal-divider fw-bold">অথবা</div>
+    
+    <a href="{{ url_for('customer_login') }}" class="btn-customer-portal w-100">
+        📱 গ্রাহক পোর্টাল (Customer Portal)
+    </a>
+</div>
+
+<script>
+    function togglePassword() {
+        const passwordInput = document.getElementById("password");
+        const toggleBtn = document.getElementById("toggleBtn");
+        if (passwordInput.type === "password") {
+            passwordInput.type = "text";
+            toggleBtn.innerHTML = '<i class="bi bi-eye-slash"></i>';
+        } else {
+            passwordInput.type = "password";
+            toggleBtn.innerHTML = '<i class="bi bi-eye"></i>';
+        }
+    }
+</script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

@@ -1,0 +1,64 @@
+{% extends 'base.html' %}
+
+{% block title %}মাসিক বিল কনফিগারেশন{% endblock %}
+
+{% block content %}
+<div class="container mt-2">
+    <div class="card p-4 shadow-sm border-0 rounded-4">
+        <div class="d-flex align-items-center mb-4 border-bottom pb-3">
+            <h3 class="fw-bold text-primary mb-0">⚙️ মাসিক বিলের তথ্য কনফিগারেশন</h3>
+            <span class="ms-3 text-muted small">* এখানে প্রদত্ত তথ্য সকল গ্রাহকের বিলে কার্যকর হবে।</span>
+        </div>
+        
+        <form method="POST">
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="fw-bold text-dark mb-1">বিলের মাস ও বছর:</label>
+                    <input type="text" name="bill_month" class="form-control" 
+                            value="{{ config.bill_month if config else '' }}" required>
+                            placeholder="যেমন: অক্টোবর ২০২৬" required>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label class="fw-bold text-dark mb-1">বিবিধ চার্জ (টাকা):</label>
+                    <input type="number" step="0.01" name="misc_charge" class="form-control" 
+                            value="{{ config.misc_charge if config else '0.00' }}" required>
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-md-3 mb-3">
+                    <label class="fw-bold text-dark mb-1">বিল ইস্যুর তারিখ:</label>
+                    <input type="date" name="bill_issue_date" class="form-control" 
+                           value="{{ config.get('bill_issue_date', '') if config else '' }}">
+                </div>
+                <div class="col-md-3 mb-3">
+                    <label class="fw-bold text-dark mb-1">পরিশোধের শেষ তারিখ:</label>
+                    <input type="date" name="due_date" class="form-control" 
+                           value="{{ config.get('due_date', '') if config else '' }}">
+                </div>
+                <div class="col-md-3 mb-3">
+                    <label class="fw-bold text-dark mb-1">বর্তমান রিডিং তারিখ:</label>
+                    <input type="date" name="curr_reading_date" class="form-control" 
+                           value="{{ config.get('curr_reading_date', '') if config else '' }}">
+                </div>
+                <div class="col-md-3 mb-3">
+                    <label class="fw-bold text-dark mb-1">পূর্ববর্তী রিডিং তারিখ:</label>
+                    <input type="date" name="prev_reading_date" class="form-control" 
+                           value="{{ config.get('prev_reading_date', '') if config else '' }}">
+                </div>
+            </div>
+
+            <div class="mb-4">
+                <label class="fw-bold text-dark mb-2">অতিরিক্ত নোটসমূহ:</label>
+                <input type="text" name="note_1" class="form-control mb-2" placeholder="নোট ১ (যেমন: অফিসের সময়সূচী)" value="{{ config.get('note_1', '') if config else '' }}">
+                <input type="text" name="note_2" class="form-control mb-2" placeholder="নোট ২ (যেমন: বিলম্ব মাসুল)" value="{{ config.get('note_2', '') if config else '' }}">
+                <input type="text" name="note_3" class="form-control" placeholder="নোট ৩" value="{{ config.get('note_3', '') if config else '' }}">
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-lg w-100 fw-bold shadow-sm">
+                তথ্য সেভ বা আপডেট করুন 💾
+            </button>
+        </form>
+    </div>
+</div>
+{% endblock %}

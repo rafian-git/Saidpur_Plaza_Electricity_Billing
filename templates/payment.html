@@ -1,0 +1,46 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card shadow-sm text-center p-4">
+                <h3 class="mb-3 text-success">বিল পেমেন্ট ও ট্রানজেকশন আইডি সাবমিট</h3>
+                
+                <!-- বিলের তথ্য -->
+                <div class="alert alert-info">
+                    <h5>প্রদেয় মোট বিল: <strong>৳ {{ bill.payable_now }}</strong></h5>
+                    <p class="mb-0">মাস: {{ bill.bill_month }} | শপ নং: {{ bill.shop_no }}</p>
+                </div>
+
+                <!-- কিউআর কোড সেクション -->
+                <div class="my-3">
+                    <p class="text-muted fw-bold">১. যেকোনো পেমেন্ট অ্যাপ দিয়ে নিচের কিউআর কোডটি স্ক্যান করুন</p>
+                    <!-- আপনার কিউআর কোডের ইমেজ বা সেকশন -->
+                    <div class="border p-2 d-inline-block bg-white shadow-sm rounded">
+                        <!-- এখানে আপনার কিউআর কোড ইমেজ পাথ বা টেমপ্লেট বসবে -->
+                        <img src="{{ url_for('static', filename='images/qr_code.png') }}" alt="QR Code" class="img-fluid" style="max-width: 200px;">
+                        <p class="mt-2 fw-bold text-dark mb-0">01335 718 096</p>
+                    </div>
+                    <p class="text-muted small mt-2">২. পেমেন্ট সম্পন্ন করে প্রাপ্ত TrxID-টি নিচের ঘরে লিখে সাবমিট করুন</p>
+                </div>
+
+                <!-- TrxID সাবমিট ফর্ম -->
+                <form action="{{ url_for('submit_trxid', bill_id=bill.id) }}" method="POST" class="text-start mt-3">
+                    <div class="mb-3">
+                        <label for="trx_id" class="form-label fw-bold">পেমেন্ট আইডি (TrxID) লিখুন:</label>
+                        <input type="text" class="form-label form-control form-control-lg text-center" id="trx_id" name="trx_id" placeholder="যেমন: 9N74XYZ..." required style="letter-spacing: 1px; font-weight: bold;">
+                    </div>
+                    
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-success btn-lg">পেমেন্ট আইডি (TrxID) সাবমিট করুন</button>
+                    </div>
+                </form>
+
+                <div class="mt-3">
+                    <a href="{{ url_for('dashboard') }}" class="text-decoration-none text-secondary">← ড্যাশবোর্ডে ফিরুন</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

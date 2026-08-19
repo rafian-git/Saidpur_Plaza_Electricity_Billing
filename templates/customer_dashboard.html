@@ -1,0 +1,77 @@
+{% extends 'customer_layout.html' %}
+
+{% block title %}গ্রাহক ড্যাশবোর্ড | সৈয়দপুর প্লাজা{% endblock %}
+
+{% block content %}
+<div class="welcome-card shadow-sm border-0 rounded-4 p-4 mt-4">
+    <div class="row align-items-center">
+        <div class="col-md-8">
+            <h2 class="fw-bold text-dark mb-1">আসসালামু আলাইকুম, {{ name }}</h2>
+            <p class="text-muted mb-0 fw-semibold">গ্রাহক আইডি: <span class="badge bg-dark fs-6">{{ id }}</span></p>
+        </div>
+        <div class="col-md-4 text-md-end mt-3 mt-md-0">
+            {# সঠিক সিনট্যাক্স: ডট নোটেশন #}
+            {% if cust and cust.connection_status == 'Active' %}
+                <span class="badge bg-success p-2 px-3 fs-6 rounded-pill">🟢 সক্রিয় গ্রাহক</span>
+            {% else %}
+                <span class="badge bg-danger p-2 px-3 fs-6 rounded-pill">🔴 সংযোগ বিচ্ছিন্ন</span>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+{% if cust and cust.connection_status != 'Active' %}
+<div class="status-alert-box text-center shadow-sm border-2">
+    <div class="fs-1 mb-2">⚠️</div>
+    <h4 class="fw-bold mb-1 text-danger">সংযোগ সাময়িকভাবে বিচ্ছিন্ন!</h4>
+    {# এখানেও ডট নোটেশন এবং 'or' ব্যবহার করে ডিফল্ট টেক্সট দেখানো হয়েছে #}
+    <p class="mb-0 small">কারণ: {{ cust.disconnect_reason or 'বকেয়া বিল বা কারিগরি ত্রুটি' }}</p>
+</div>
+{% endif %}
+
+<div class="row g-4 mt-3 mb-5">
+    <div class="col-md-4">
+        <a href="{{ url_for('customer_view_bills') }}" class="portal-btn btn-view-bill text-decoration-none">
+            <span class="fs-1">📄</span>
+            <span>বিল হিস্ট্রি দেখুন</span>
+        </a>
+    </div>
+    <div class="col-md-4">
+        <a href="{{ url_for('payment_portal') }}" class="portal-btn btn-pay-bill text-decoration-none">
+            <span class="fs-1">💳</span>
+            <span>অনলাইন পেমেন্ট</span>
+        </a>
+    </div>
+    <div class="col-md-4">
+        <a href="{{ url_for('customer_change_password') }}" class="portal-btn btn-settings text-decoration-none">
+            <span class="fs-1">⚙️</span>
+            <span>পাসওয়ার্ড পরিবর্তন</span>
+        </a>
+    </div>
+</div>
+
+<table class="table table-bordered">
+    <thead>
+        <tr>
+            <th>মাস</th>
+            <th>মোট টাকা</th>
+            <th>অবস্থা</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for bill in bills %}
+        <tr>
+            <td>{{ bill.bill_month }}</td>
+            <td>৳ {{ bill.total_payable }}</td>
+            <td>
+                {% if bill.status == 'Paid' %}
+                    <span class="badge bg-success">পরিশোধিত</span>
+                {% else %}
+                    <span class="badge bg-danger">বকেয়া</span>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

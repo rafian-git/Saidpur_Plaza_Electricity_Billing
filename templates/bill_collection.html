@@ -1,0 +1,136 @@
+{% extends 'base.html' %}
+
+{% block title %}বিল কালেকশন কাউন্টার{% endblock %}
+
+{% block content %}
+<style>
+    .collection-card { background: #ffffff; border-radius: 14px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); padding: 30px; }
+    .table-admin th { background-color: #1e3c72 !important; color: white !important; font-weight: 600; text-align: center; }
+    .table-admin td { text-align: center; vertical-align: middle; font-weight: 600; }
+    .search-box { background: #ebf3fe; border-radius: 10px; padding: 20px; margin-bottom: 25px; }
+</style>
+
+<div class="search-box">
+    <form action="{{ url_for('bill_collection') }}" method="GET" class="row g-3 align-items-center">
+        <div class="col-md-9">
+            <label for="search" class="form-label fw-bold text-dark">গ্রাহক আইডি বা নাম দিয়ে বকেয়া খুঁজুন</label>
+            <input type="text" class="form-control form-control-lg fw-bold" id="search" name="search" 
+                   value="{{ search_query or '' }}" placeholder="যেমন: SP-101" autofocus autocomplete="off">
+        </div>
+        <div class="col-md-3 mt-md-4">
+            <button type="submit" class="btn btn-primary btn-lg w-100 fw-bold rounded-3">খুঁজুন 🔍</button>
+        </div>
+    </form>
+</div>
+
+<div class="collection-card">
+    <h5 class="fw-bold text-dark mb-4 pb-2 border-bottom">📋 বকেয়া বিলের তালিকা</h5>
+    <div class="table-responsive">
+        <table class="table table-bordered table-hover table-admin">
+            <thead>
+                <tr>
+                    <th>গ্রাহক আইডি</th><th>মাস</th><th>পূর্ববর্তী</th><th>বর্তমান</th><th>প্রদেয় টাকা</th><th>স্ট্যাটাস</th><th>অ্যাকশন</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if bills %}
+                    {% for bill in bills %}
+                    <tr>
+                        <td class="text-primary">{{ bill.customer_id }}</td>
+                        <td>{{ bill.bill_month }}</td>
+                        <td>{{ bill.previous_reading }}</td>
+                        <td>{{ bill.current_reading }}</td>
+                        <td class="text-danger fs-5">{{ bill.payable_now }} ৳</td>
+                        <td>
+                            {% if bill.is_late %}
+                                <span class="badge bg-warning text-dark">বিলম্বিত</span>
+                            {% else %}
+                                <span class="badge bg-danger">বকেয়া</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="d-flex justify-content-center gap-2 align-items-center">
+                                <!-- পেমেন্ট রিসিভ ফর্ম -->
+                                <form action="{{ url_for('bill_collection') }}" method="POST" 
+                                      onsubmit="return confirmPayment('{{ bill.customer_id }}', '{{ bill.payable_now }}');" style="margin:0;">
+                                    <input type="hidden" name="bill_id" value="{{ bill.id }}">
+                                    <div class="input-group input-group-sm" style="max-width: 140px;">
+                                        <input type="number" name="pay_amount" class="form-control" value="{{ bill.payable_now }}" required>
+                                        <button type="submit" class="btn btn-success">রিসিভ</button>
+                                    </div>
+                                </form>
+
+                                <!-- এডমিন এডিট / মওকুফ বা কিস্তি বাটন -->
+                                <button type="button" class="btn btn-warning btn-sm fw-bold px-2" data-bs-toggle="modal" data-bs-target="#editBillModal{{ bill.id }}" title="বিল লেস, মওকুফ বা কিস্তি">
+                                    ⚙️
+                                </button>
+                            </div>
+
+                            <!-- প্রতিটি বিলের নিজস্ব মডাল (Modal) - লেস, বিলম্ব ফি মওকুফ ও কিস্তি অপশন সহ -->
+                            <div class="modal fade text-start" id="editBillModal{{ bill.id }}" tabindex="-1" aria-hidden="true">
+                                <div class="modal-dialog">
+                                    <div class="modal-content border-0 shadow">
+                                        <form action="{{ url_for('admin_edit_bill', bill_id=bill.id) }}" method="POST">
+                                            <div class="modal-header bg-dark text-white">
+                                                <h5 class="modal-title fs-6">⚙️ বিল এডিট, লেস, মওকুফ ও কিস্তি (ID: {{ bill.customer_id }})</h5>
+                                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                                            </div>
+                                            <div class="modal-body p-4">
+                                                
+                                                <!-- ১. মূল প্রদেয় টাকা কমানোর (Bill Less) অপশন -->
+                                                <div class="mb-3">
+                                                    <label class="form-label fw-bold">মূল প্রদেয় টাকা (Bill Less / Total Payable):</label>
+                                                    <input type="number" step="0.01" class="form-control fw-bold text-danger" name="total_payable" value="{{ bill.total_payable }}" required>
+                                                    <small class="text-muted">গ্রাহকের দাবি অনুযায়ী এডিট করে মূল বিলের পরিমাণ কমাতে বা বাড়াতে পারবেন।</small>
+                                                </div>
+
+                                                <!-- ২. বিলম্ব ফি মওকুফ (After Due / Late Fee Waiver) অপশন -->
+                                                <div class="mb-3">
+                                                    <label class="form-label fw-bold">বিলম্ব ফিসহ প্রদেয় টাকা (After Due / Late Fee):</label>
+                                                    <input type="number" step="0.01" class="form-control" name="total_payable_after_due" value="{{ bill.total_payable_after_due }}" required>
+                                                    <small class="text-muted">বিলম্ব ফি মওকুফ করতে চাইলে এই মান কমিয়ে মূল বিলের সমান বা জিরো করে দিতে পারেন।</small>
+                                                </div>
+
+                                                <!-- ৩. কিস্তি বা আংশিক পেমেন্ট নোট (Installment Note) -->
+                                                <div class="mb-3">
+                                                    <label class="form-label fw-bold">কিস্তি বিবরণ বা বিশেষ নোট (Installment Note):</label>
+                                                    <input type="text" class="form-control" name="installment_note" value="{{ bill.installment_note or '' }}" placeholder="যেমন: প্রথম কিস্তি ৫০০ টাকা চুক্তি">
+                                                    <small class="text-muted">বিল কিস্তিতে বিভক্ত করা হলে এখানে তার চুক্তি বা কিস্তির বিবরণ লিখে রাখতে পারবেন।</small>
+                                                </div>
+
+                                                <!-- ৪. স্ট্যাটাস পরিবর্তন -->
+                                                <div class="mb-3">
+                                                    <label class="form-label fw-bold">স্ট্যাটাস (Status):</label>
+                                                    <select name="status" class="form-select fw-bold">
+                                                        <option value="Unpaid" {% if bill.status == 'Unpaid' %}selected{% endif %}>বকেয়া (Unpaid)</option>
+                                                        <option value="Partial" {% if bill.status == 'Partial' %}selected{% endif %}>আংশিক পরিশোধ / কিস্তি (Partial)</option>
+                                                        <option value="Paid" {% if bill.status == 'Paid' %}selected{% endif %}>পরিশোধিত (Paid)</option>
+                                                    </select>
+                                                </div>
+
+                                            </div>
+                                            <div class="modal-footer bg-light">
+                                                <button type="button" class="btn btn-secondary btn-sm px-3" data-bs-dismiss="modal">বাতিল</button>
+                                                <button type="submit" class="btn btn-primary btn-sm px-4 fw-bold">পরিবর্তন সংরক্ষণ করুন 🚀</button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                {% else %}
+                    <tr><td colspan="7" class="text-muted py-4">কোনো বকেয়া বিল পাওয়া যায়নি।</td></tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    function confirmPayment(id, amount) {
+        return confirm('সতর্কতা: ' + id + ' নং গ্রাহকের কাছ থেকে ' + amount + ' টাকা গ্রহণ করছেন?');
+    }
+</script>
+{% endblock %}

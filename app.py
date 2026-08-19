@@ -1209,7 +1209,9 @@ def check_and_fix_database():
         columns = [row[1] for row in cursor.fetchall()]
         if 'trx_id' not in columns:
             conn.execute("ALTER TABLE payments ADD COLUMN trx_id TEXT")
-            conn.commit()
+        if 'status' not in columns:
+            conn.execute("ALTER TABLE payments ADD COLUMN status TEXT DEFAULT 'Paid'")
+        conn.commit()
     except Exception as e:
         print("Database update error:", e)
     conn.close()

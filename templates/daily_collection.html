@@ -1,0 +1,70 @@
+{% extends 'base.html' %}
+
+{% block title %}ডেইলি কালেকশন রিপোর্ট - সৈয়দপুর প্লাজা{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3 class="fw-bold text-dark">📅 কালেকশন রিপোর্ট: <span class="text-primary">{{ selected_date }}</span></h3>
+        <a href="{{ url_for('dashboard') }}" class="btn btn-secondary btn-sm fw-bold">⬅️ ড্যাশবোর্ডে ফিরে যান</a>
+    </div>
+
+    <!-- তারিখ পরিবর্তন বা ফিল্টার করার ফর্ম -->
+    <div class="card shadow-sm mb-4 border-0" style="background: #f8f9fa; border-radius: 12px;">
+        <div class="card-body p-3">
+            <form method="GET" action="{{ url_for('daily_collection') }}" class="row g-3 align-items-center">
+                <div class="col-md-4">
+                    <label class="form-label fw-bold small text-muted">তারিখ পরিবর্তন করুন:</label>
+                    <input type="date" class="form-control" name="date" value="{{ request.args.get('date', '') }}">
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary w-100 fw-bold">ফিল্টার করুন</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- মোট কালেকশন বক্স -->
+    <div class="card bg-success text-white p-3 mb-4">
+        <h4>মোট কালেকশন</h4>
+        <!-- এখানে সরাসরি টেমপ্লেট ভেরিয়েবলটি প্রিন্ট করতে হবে -->
+        <h2>৳ {{ "%.2f"|format(total_collection) }}</h2>
+    </div>
+
+    <!-- কালেকশনের তালিকা টেবিল -->
+    <div class="card shadow mb-4 border-0" style="border-radius: 12px;">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-bordered table-striped align-middle">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>পেমেন্ট আইডি</th>
+                            <th>গ্রাহক আইডি</th>
+                            <th>বিল আইডি</th>
+                            <th>টাকার পরিমাণ</th>
+                            <th>পেমেন্টের মাধ্যম</th>
+                            <th>তারিখ ও সময়</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in collections %}
+                        <tr>
+                            <td>#PAY-{{ item.id }}</td>
+                            <td class="fw-bold">{{ item.customer_id }}</td>
+                            <td>{{ item.bill_id }}</td>
+                            <td class="text-success fw-bold">{{ item.amount }} ৳</td>
+                            <td><span class="badge bg-info text-dark">{{ item.payment_method }}</span></td>
+                            <td>{{ item.payment_date }}</td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="6" class="text-center text-muted py-4">এই তারিখে কোনো কালেকশন পাওয়া যায়নি।</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

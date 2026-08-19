@@ -1272,8 +1272,11 @@ def customer_change_password():
 # 🚪 সিস্টেম লগআউট
 @app.route('/logout')
 def logout():
+    is_customer = 'customer_id' in session
     session.clear()
     flash('সিস্টেম থেকে নিরাপদে লগআউট করা হয়েছে।', 'info')
+    if is_customer:
+        return redirect(url_for('customer_login'))
     return redirect(url_for('login'))
 
 if __name__ == '__main__':

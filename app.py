@@ -1090,7 +1090,7 @@ def customer_login():
 
         if cust:
             # প্লেইন টেক্সট পাসওয়ার্ড চেক (অথবা ডিফল্ট '123456')
-            if cust['password'] == passwd or (passwd == '123456'):
+            if cust['password'] == passwd:
                 session['customer_id'] = cust['customer_id']
                 session['customer_name'] = cust['owner_name']
                 return redirect(url_for('customer_dashboard'))

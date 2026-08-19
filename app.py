@@ -74,7 +74,7 @@ def login():
 
 @app.route('/')
 def index():
-    return redirect(url_for('login')) # সরাসরি লগইন পেজে নিয়ে যাবে
+    return redirect(url_for('customer_login')) # সরাসরি customer login পেজে রিডাইরেক্ট করা হলো
 
 @app.route('/generate_qr/<string:c_id>/<string:amount>')
 def generate_qr(c_id, amount):

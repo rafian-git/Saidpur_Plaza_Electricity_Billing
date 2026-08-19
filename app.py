@@ -47,8 +47,8 @@ def role_required(allowed_roles):
     return decorator
 
 # অ্যাপ শুরুর সময় ডেটাবেজ চেক
-if not os.path.exists(DB_PATH):
-    init_db()
+#if not os.path.exists(DB_PATH):
+#    init_db()
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -1257,4 +1257,4 @@ def logout():
     return redirect(url_for('login'))
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+    app.run(host="0.0.0.0",debug=True, port=5000)

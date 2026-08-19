@@ -9,4 +9,4 @@ else
     echo "[entrypoint] database.db already exists, skipping SQL import."
 fi
 
-exec python app.py
+exec /var/www/Saidpur_Plaza_Electricity_Billing/.venv/bin/python app.py

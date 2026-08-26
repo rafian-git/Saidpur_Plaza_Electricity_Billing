@@ -69,21 +69,50 @@
                             </div>
                             <div class="modal-body">
                                 <input type="hidden" name="action" value="edit">
-                                <input type="hidden" name="customer_id" value="{{ cust.customer_id }}">
+                                <!-- পুরানো আইডি ব্যাকএন্ডে চেনার জন্য টেমপ্লেটে রাখা হলো -->
+                                <input type="hidden" name="old_customer_id" value="{{ cust.customer_id }}">
+                    
                                 <div class="row g-3">
-                                    <div class="col-md-6"><label>মালিকের নাম</label><input type="text" name="owner_name" class="form-control" value="{{ cust.owner_name }}" required></div>
-                                    <div class="col-md-6"><label>মিটার নং</label><input type="text" name="meter_no" class="form-control" value="{{ cust.meter_no }}"></div>
-                                    <div class="col-md-6"><label>দোকান নং</label><input type="text" name="shop_no" class="form-control" value="{{ cust.shop_no }}"></div>
-                                    <div class="col-md-6"><label>ইউনিট রেট</label><input type="number" step="0.01" name="unit_rate" class="form-control" value="{{ cust.unit_rate }}"></div>
-                                    <div class="col-md-6"><label>অনুমোদিত লোড (KW)</label><input type="number" step="0.01" name="allocated_load" class="form-control" value="{{ cust.allocated_load }}"></div>
-                                    <div class="col-md-6"><label>রেট পার KW</label><input type="number" step="0.01" name="rate_per_kw" class="form-control" value="{{ cust.rate_per_kw }}"></div>
-                                    <div class="col-md-6"><label>পূর্ববর্তী/প্রাথমিক রিডিং</label><input type="number" step="0.01" name="initial_reading" class="form-control" value="{{ cust.initial_reading }}"></div>
-                                    <!-- নিচের লাইনটি আপনার ফর্মে যেখানে ইনপুট ফিল্ডগুলো আছে, সেখানে যোগ করুন -->
-                                    <div class="col-md-3">
+                                    <!-- কাস্টমার আইডি এডিট করার বক্স -->
+                                    <div class="col-md-6">
+                                        <label class="fw-bold">গ্রাহক আইডি</label>
+                                        <input type="text" name="customer_id" class="form-control" value="{{ cust.customer_id }}" required>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="fw-bold">মালিকের নাম</label>
+                                        <input type="text" name="owner_name" class="form-control" value="{{ cust.owner_name }}" required>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="fw-bold">মিটার নং</label>
+                                        <input type="text" name="meter_no" class="form-control" value="{{ cust.meter_no }}">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="fw-bold">দোকান নং</label>
+                                        <input type="text" name="shop_no" class="form-control" value="{{ cust.shop_no }}">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="fw-bold">ইউনিট রেট</label>
+                                        <input type="number" step="0.01" name="unit_rate" class="form-control" value="{{ cust.unit_rate }}">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="fw-bold">অনুমোদিত লোড (KW)</label>
+                                        <input type="number" step="0.01" name="allocated_load" class="form-control" value="{{ cust.allocated_load }}">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="fw-bold">রেট পার KW</label>
+                                        <input type="number" step="0.01" name="rate_per_kw" class="form-control" value="{{ cust.rate_per_kw }}">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="fw-bold">পূর্ববর্তী/প্রাথমিক রিডিং</label>
+                                        <input type="number" step="0.01" name="initial_reading" class="form-control" value="{{ cust.initial_reading }}">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="fw-bold">কানেকশন স্ট্যাটাস</label>
                                         <select name="connection_status" class="form-control" required>
-                                            <option value="Active">সক্রিয় (Active)</option>
-                                            <option value="Disconnected">নিষ্ক্রিয় (Disconnected)</option>
-                                    </select>
+                                            <option value="Active" {% if cust.connection_status == 'Active' %}selected{% endif %}>সক্রিয় (Active)</option>
+                                            <option value="Disconnected" {% if cust.connection_status == 'Disconnected' %}selected{% endif %}>নিষ্ক্রিয় (Disconnected)</option>
+                                        </select>
+                                    </div>
                                 </div>
                             </div>
                             <div class="modal-footer">

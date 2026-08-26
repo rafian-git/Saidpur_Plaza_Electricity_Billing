@@ -416,6 +416,8 @@ def customers():
 
             elif action == 'edit':
                 # ফর্ম থেকে ডেটা সংগ্রহ
+                old_c_id = request.form.get('old_customer_id', '').strip() # পুরানো আইডি
+                new_c_id = request.form.get('customer_id', '').strip() # নতুন বা পরিবর্তিত আইডি
                 meter = request.form.get('meter_no', '').strip()
                 owner = request.form.get('owner_name', '').strip()
                 plaza = request.form.get('plaza_name', '').strip()
@@ -427,19 +429,22 @@ def customers():
                 rate_kw = float(request.form.get('rate_per_kw', 0))
                 init_r = float(request.form.get('initial_reading', 0))
                 status = request.form.get('connection_status', 'Active')
-                c_id = request.form.get('customer_id', '').strip()
 
-                # ডাটাবেস আপডেট কুয়েরি
-                conn.execute('''
-                    UPDATE customers SET
-                        meter_no=?, owner_name=?, shop_no=?,
-                        unit_rate=?, allocated_load=?, rate_per_kw=?, 
-                        initial_reading=?, connection_status=?
-                    WHERE customer_id=?
-                ''', (meter, owner, shop, u_rate, load, rate_kw, init_r, status, c_id))
+                try:
+                    # ডাটাবেস আপডেট কুয়েরি (এখানে customer_id সহ সব আপডেট হবে)
+                    conn.execute('''
+                        UPDATE customers SET
+                            customer_id=?, meter_no=?, owner_name=?, shop_no=?,
+                            unit_rate=?, allocated_load=?, rate_per_kw=?, 
+                            initial_reading=?, connection_status=?
+                        WHERE customer_id=?
+                    ''', (new_c_id, meter, owner, shop, u_rate, load, rate_kw, init_r, status, old_c_id))
     
-                conn.commit()
-                flash('গ্রাহকের তথ্য সফলভাবে আপডেট হয়েছে!', 'success')
+                    conn.commit()
+                    flash('গ্রাহকের তথ্য ও আইডি সফলভাবে আপডেট হয়েছে!', 'success')
+                except sqlite3.IntegrityError:
+                    flash('ত্রুটি: এই নতুন গ্রাহক আইডিটি ইতিমধ্যে অন্য কারো নামে বিদ্যমান!', 'danger')
+                
                 return redirect(url_for('customers'))
             
         # ডেটা রিট্রিভ করার সময় লিস্ট অফ ডিকশনারি করা যাতে টেমপ্লেটে এরর না আসে
@@ -667,6 +672,16 @@ def generate_bill():
 
     return redirect(url_for('meter_reading'))
 
+from flask import make_response
+
+# WeasyPrint নিরাপদ ইমপোর্ট করার পদ্ধতি
+try:
+    from weasyprint import HTML
+    WEASYPRINT_AVAILABLE = True
+except (ImportError, OSError):
+    WEASYPRINT_AVAILABLE = False
+
+
 @app.route('/print_bill/<int:bill_id>')
 @role_required(['admin', 'moderator', 'viewer'])
 def bill_print(bill_id):
@@ -687,18 +702,32 @@ def bill_print(bill_id):
 
     return render_template('billing_dashboard.html', bill=bill)
 
-from flask import make_response
-from weasyprint import HTML
 
 @app.route('/download_bill/<int:bill_id>')
+@role_required(['admin', 'moderator', 'viewer'])
 def download_bill(bill_id):
-    # ১. ডাটা আনা (আপনার আগের বিলের ডাটা কোয়েরি এখানে বসবে)
-    bill = get_bill_data(bill_id) 
+    conn = get_db_connection()
+    bill = conn.execute('''
+        SELECT b.*, c.owner_name as customer_name, c.meter_no, c.shop_no, c.floor_no
+        FROM bills b
+        JOIN customers c ON b.customer_id = c.customer_id
+        WHERE b.id = ?
+    ''', (bill_id,)).fetchone()
+    conn.close()
+
+    if bill is None:
+        flash('দুঃখিত, এই বিলটি খুঁজে পাওয়া যায়নি!', 'danger')
+        return redirect(url_for('billing_dashboard'))
     
-    # ২. এইচটিএমএল রেন্ডার করা
+    # ১. এইচটিএমএল রেন্ডার করা (আপনার টেমপ্লেটের নাম bill_view.html হলে সেটি দেবেন)
     html_string = render_template('bill_view.html', bill=bill)
     
-    # ৩. পিডিএফ তৈরি করা
+    # ২. লোকাল পিসিতে WeasyPrint না থাকলে সেফ হ্যান্ডেল করা
+    if not WEASYPRINT_AVAILABLE:
+        flash('লোকাল পিসিতে WeasyPrint লাইব্রেরি নেই বলে পিডিএফ ডাউনলোড করা যাচ্ছে না, তবে এটি অনলাইন সার্ভারে ঠিকমতো কাজ করবে।', 'warning')
+        return redirect(url_for('billing_dashboard'))
+    
+    # ৩. অনলাইন সার্ভারে পিডিএফ তৈরি করা
     pdf = HTML(string=html_string).write_pdf()
     
     # ৪. পিডিএফ ডাউনলোড হিসেবে পাঠানো
@@ -1109,11 +1138,65 @@ def customer_dashboard():
     conn = get_db_connection()
     c_id = session['customer_id']
     
+    # বর্তমান তারিখ (আজকের তারিখ)
+    today = datetime.now().date()
+
     # গ্রাহকের বর্তমান অবস্থা
     cust = conn.execute('SELECT * FROM customers WHERE customer_id=?', (c_id,)).fetchone()
     
     # গ্রাহকের বিলের ইতিহাস (সবশেষ বিল সবার আগে)
-    bills = conn.execute('SELECT * FROM bills WHERE customer_id=? ORDER BY id DESC', (c_id,)).fetchall()
+    raw_bills = conn.execute('SELECT * FROM bills WHERE customer_id=? ORDER BY id DESC', (c_id,)).fetchall()
+    
+    bills = []
+    for b in raw_bills:
+        # ডিকশনারিতে রূপান্তর করে নেওয়া যেন মডিফাই করা যায়
+        bill_dict = dict(b)
+        
+        # ডিফল্টভাবে মোট প্রদেয় বিল
+        display_amt = bill_dict['total_payable']
+        
+        # শেষ তারিখ চেক করার লজিক
+        if bill_dict.get('due_date') and bill_dict.get('status') != 'Paid':
+            try:
+                due_dt = datetime.strptime(str(bill_dict['due_date']), '%Y-%m-%d').date()
+                if today > due_dt:
+                    # যদি ডেট পার হয়ে যায় এবং ডেটাবেজে delayed_amount থাকে
+                    if bill_dict.get('delayed_amount'):
+                        display_amt = bill_dict['delayed_amount']
+            except Exception:
+                pass
+                
+        bill_dict['payable_display'] = display_amt
+        bills.append(bill_dict)
+    
+    # চলতি বা সর্বশেষ পেন্ডিং বিলটি বের করা (যেটির ওপর ভিত্তি করে ড্যাশবোর্ডে বড় অ্যামাউন্টটি দেখায়)
+    current_bill = conn.execute("SELECT * FROM bills WHERE customer_id=? AND status != 'Paid' ORDER BY id DESC LIMIT 1", (c_id,)).fetchone()
+    
+    display_amount = 0
+    if current_bill:
+        # ডেটাবেজে শেষ তারিখের কলামটি কী নামে আছে (যেমন: due_date বা last_date) তা এখানে চেক করবেন
+        due_date_str = current_bill['due_date'] if 'due_date' in current_bill.keys() else None
+        
+        is_expired = False
+        if due_date_str:
+            try:
+                # ডেট ফরম্যাট আপনার সিস্টেম অনুযায়ী (যেমন: YYYY-MM-DD বা DD-MM-YYYY)
+                due_date = datetime.strptime(str(due_date_str), '%Y-%m-%d').date()
+                if today > due_date:
+                    is_expired = True
+            except Exception:
+                try:
+                    due_date = datetime.strptime(str(due_date_str), '%d-%m-%Y').date()
+                    if today > due_date:
+                        is_expired = True
+                except Exception:
+                    pass
+        
+        # যদি শেষ তারিখ পার হয়ে যায় এবং ডেটাবেজে বিলম্বিত অ্যামাউন্ট (delayed_amount বা similar) থাকে
+        if is_expired and 'delayed_amount' in current_bill.keys() and current_bill['delayed_amount']:
+            display_amount = current_bill['delayed_amount']
+        else:
+            display_amount = current_bill['total_payable']
     
     conn.close()
 
@@ -1121,7 +1204,8 @@ def customer_dashboard():
                            id=c_id, 
                            name=session['customer_name'], 
                            cust=cust, 
-                           bills=bills)
+                           bills=bills,
+                           display_amount=display_amount)
 
 @app.route('/customer/portal/view_bills') # অথবা আপনার রাউটের নাম অনুযায়ী
 def customer_view_bills():
@@ -1160,11 +1244,35 @@ def payment_portal():
 
     payable_amount = 0
     if latest_bill and latest_bill['status'] != 'Paid':
-        today_str = datetime.now().strftime('%d-%m-%Y')
-        if today_str > latest_bill['due_date']:
+        today = datetime.now().date()
+        due_date_str = latest_bill['due_date']
+        
+        print(f"--- DEBUG --- Today: {today}, Due Date from DB: {due_date_str}") # টার্মিনালে প্রিন্ট করে দেখার জন্য
+        
+        is_expired = False
+        if due_date_str:
+            try:
+                due_date = datetime.strptime(str(due_date_str).strip(), '%Y-%m-%d').date()
+                if today > due_date:
+                    is_expired = True
+            except Exception as e:
+                print(f"Date parse error 1: {e}")
+                try:
+                    due_date = datetime.strptime(str(due_date_str).strip(), '%d-%m-%Y').date()
+                    if today > due_date:
+                        is_expired = True
+                except Exception as e2:
+                    print(f"Date parse error 2: {e2}")
+                    pass
+
+        print(f"Is Expired?: {is_expired}") # ডেট পার হয়েছে কি না তা টার্মিনালে দেখাবে
+        
+        if is_expired and latest_bill['total_payable_after_due']:
             payable_amount = latest_bill['total_payable_after_due']
         else:
             payable_amount = latest_bill['total_payable']
+
+    print(f"Final Payable Amount: {payable_amount}") # চূড়ান্ত কত টাকা পাঠাচ্ছে তা দেখাবে
 
     qr_image_path = 'static/bangla_qr.jpg'
     dynamic_qr_link = f"bankqr://pay?merchant=Saidpur_Plaza&customer_id={c_id}&amount={payable_amount}"

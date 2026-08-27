@@ -1152,17 +1152,16 @@ def customer_dashboard():
         # ডিকশনারিতে রূপান্তর করে নেওয়া যেন মডিফাই করা যায়
         bill_dict = dict(b)
         
-        # ডিফল্টভাবে মোট প্রদেয় বিল
-        display_amt = bill_dict['total_payable']
+        # ডিফল্টভাবে মোট প্রদেয় বিল
+        display_amt = bill_dict['total_payable_after_due'] if bill_dict.get('total_payable_after_due') else bill_dict['total_payable']
         
         # শেষ তারিখ চেক করার লজিক
-        if bill_dict.get('due_date') and bill_dict.get('status') != 'Paid':
+        if bill_dict.get('due_date') and bill_dict.get('status') not in ('Paid', 'Pending'):
             try:
                 due_dt = datetime.strptime(str(bill_dict['due_date']), '%Y-%m-%d').date()
-                if today > due_dt:
-                    # যদি ডেট পার হয়ে যায় এবং ডেটাবেজে delayed_amount থাকে
-                    if bill_dict.get('delayed_amount'):
-                        display_amt = bill_dict['delayed_amount']
+                if today <= due_dt:
+                    # যদি ডেট পার না হয়ে থাকে, তবে ডিউ ছাড়া মূল অ্যামাউন্ট দেখানো হয়
+                    display_amt = bill_dict['total_payable']
             except Exception:
                 pass
                 
@@ -1192,9 +1191,9 @@ def customer_dashboard():
                 except Exception:
                     pass
         
-        # যদি শেষ তারিখ পার হয়ে যায় এবং ডেটাবেজে বিলম্বিত অ্যামাউন্ট (delayed_amount বা similar) থাকে
-        if is_expired and 'delayed_amount' in current_bill.keys() and current_bill['delayed_amount']:
-            display_amount = current_bill['delayed_amount']
+        # যদি শেষ তারিখ পার হয়ে যায় অথবা বিল পেন্ডিং থাকে, তবে ডিউ সহ অ্যামাউন্ট দেখানো হয়
+        if (is_expired or current_bill['status'] == 'Pending') and current_bill.get('total_payable_after_due'):
+            display_amount = current_bill['total_payable_after_due']
         else:
             display_amount = current_bill['total_payable']
     

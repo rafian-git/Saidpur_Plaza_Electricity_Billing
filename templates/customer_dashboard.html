@@ -62,7 +62,7 @@
         {% for bill in bills %}
         <tr>
             <td>{{ bill.bill_month }}</td>
-            <td>৳ {{ bill.total_payable }}</td>
+            <td>৳ {{ bill.payable_display }}</td>
             <td>
                 {% if bill.status == 'Paid' %}
                     <span class="badge bg-success">পরিশোধিত</span>

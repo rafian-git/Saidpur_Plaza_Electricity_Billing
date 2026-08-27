@@ -62,7 +62,7 @@
                         <tr>
                             <td class="fw-bold">{{ bill.bill_month }}</td>
                             <td>{{ bill.units_consumed }}</td>
-                            <td class="text-danger fw-bold">{{ bill.total_payable }} ৳</td>
+                            <td class="text-danger fw-bold">{{ bill.payable_display }} ৳</td>
                             <td>
                                 {% if bill.status == 'Paid' %}
                                     <span class="badge bg-success">পরিশোধিত</span>

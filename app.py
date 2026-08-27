@@ -636,12 +636,27 @@ def customer_history(c_id):
     conn = get_db_connection()
     # গ্রাহকের তথ্য এবং সব বিলের ইতিহাস আনা
     customer = conn.execute('SELECT * FROM customers WHERE customer_id = ?', (c_id,)).fetchone()
-    history = conn.execute('SELECT * FROM bills WHERE customer_id = ? ORDER BY id DESC', (c_id,)).fetchall()
+    raw_history = conn.execute('SELECT * FROM bills WHERE customer_id = ? ORDER BY id DESC', (c_id,)).fetchall()
     conn.close()
 
     if not customer:
-        flash('গ্রাহক পাওয়া যায়নি!', 'danger')
+        flash('গ্রাহক পাওয়া যায়নি!', 'danger')
         return redirect(url_for('billing_dashboard'))
+
+    today = datetime.now().date()
+    history = []
+    for b in raw_history:
+        bill_dict = dict(b)
+        display_amt = bill_dict['total_payable_after_due'] if bill_dict.get('total_payable_after_due') else bill_dict['total_payable']
+        if bill_dict.get('due_date') and bill_dict.get('status') not in ('Paid', 'Pending'):
+            try:
+                due_dt = datetime.strptime(str(bill_dict['due_date']), '%Y-%m-%d').date()
+                if today <= due_dt:
+                    display_amt = bill_dict['total_payable']
+            except Exception:
+                pass
+        bill_dict['payable_display'] = display_amt
+        history.append(bill_dict)
 
     return render_template('customer_history.html', customer=customer, history=history)
 
@@ -1219,15 +1234,30 @@ def customer_view_bills():
     customer = conn.execute("SELECT * FROM customers WHERE customer_id = ?", (customer_id,)).fetchone()
     
     # অতীতের ২৪ মাসের বিলের হিস্ট্রি আনা
-    history = conn.execute('''
+    raw_history = conn.execute('''
         SELECT * FROM bills 
         WHERE customer_id = ? 
         ORDER BY id DESC LIMIT 24
     ''', (customer_id,)).fetchall()
     
     conn.close()
+
+    today = datetime.now().date()
+    history = []
+    for b in raw_history:
+        bill_dict = dict(b)
+        display_amt = bill_dict['total_payable_after_due'] if bill_dict.get('total_payable_after_due') else bill_dict['total_payable']
+        if bill_dict.get('due_date') and bill_dict.get('status') not in ('Paid', 'Pending'):
+            try:
+                due_dt = datetime.strptime(str(bill_dict['due_date']), '%Y-%m-%d').date()
+                if today <= due_dt:
+                    display_amt = bill_dict['total_payable']
+            except Exception:
+                pass
+        bill_dict['payable_display'] = display_amt
+        history.append(bill_dict)
     
-    # অত্যন্ত গুরুত্বপূর্ণ: এখানে 'history=history' পাস করতেই হবে, কারণ আপনার এইচটিএমএলে 'history' লুপ ব্যবহার করা হয়েছে
+    # অত্যন্ত গুরুত্বপূর্ণ: এখানে 'history=history' পাস করতেই হবে, কারণ আপনার এইচটিএমএলে 'history' লুপ ব্যবহার করা হয়েছে
     return render_template('customer_view_bills.html', customer=customer, history=history)
 
 @app.route('/customer/portal/payment')

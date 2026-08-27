@@ -1192,7 +1192,7 @@ def customer_dashboard():
                     pass
         
         # যদি শেষ তারিখ পার হয়ে যায় অথবা বিল পেন্ডিং থাকে, তবে ডিউ সহ অ্যামাউন্ট দেখানো হয়
-        if (is_expired or current_bill['status'] == 'Pending') and current_bill.get('total_payable_after_due'):
+        if (is_expired or current_bill['status'] == 'Pending') and current_bill['total_payable_after_due']:
             display_amount = current_bill['total_payable_after_due']
         else:
             display_amount = current_bill['total_payable']

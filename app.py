@@ -562,19 +562,19 @@ def meter_reading():
                     }
                     month_code = month_map.get(month_str, '00')
                     customer_code = str(c_id).zfill(6) # আইডি ৬ সংখ্যার করা ভালো, যেমন 10001 -> 10001
-                    unique_bill_id = int(f"{year_str}{month_code}{customer_code}")
+                    bill_no = f"{year_str}{month_code}{customer_code}"
                     
-                    # এখন ইনসার্ট কুয়েরিতে id এর জায়গায় unique_bill_id বসিয়ে দিন
+                    # এখন ইনসার্ট কুয়েরিতে AUTOINCREMENT ব্যবহার করুন
                     conn.execute('''
                         INSERT OR REPLACE INTO bills (
-                            id, customer_id, meter_no, owner_name, bill_month, plaza_name, floor_no, block_no, shop_no,
+                            bill_no, customer_id, meter_no, owner_name, bill_month, plaza_name, floor_no, block_no, shop_no,
                             bill_issue_date, due_date, curr_reading_date, prev_reading_date,
                             current_reading, previous_reading, units_consumed, energy_charge, demand_charge,
                             misc_charge, principal_amount, vat, current_month_total, arrears,
                             total_payable, late_fee, total_payable_after_due, note_1, note_2, note_3, is_locked, status, prepared_by
                         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ''', (
-                        unique_bill_id, c_id, cust['meter_no'], cust['owner_name'], config['bill_month'], cust['plaza_name'], cust['floor_no'], cust['block_no'], cust['shop_no'],
+                        bill_no, c_id, cust['meter_no'], cust['owner_name'], config['bill_month'], cust['plaza_name'], cust['floor_no'], cust['block_no'], cust['shop_no'],
                         config['bill_issue_date'], config['due_date'], config['curr_reading_date'], config['prev_reading_date'],
                         curr_read, prev_read, units_consumed, energy_charge, demand_charge,
                         misc_charge, principal_amount, vat, (principal_amount + vat), arrears,
@@ -582,7 +582,7 @@ def meter_reading():
                     ))
 
                     conn.commit()
-                    flash(f'বিল সফলভাবে তৈরি হয়েছে! আইডি: {unique_bill_id}', 'success')
+                    flash(f'বিল সফলভাবে তৈরি হয়েছে! বিল নম্বর: {bill_no}', 'success')
         
         conn.close()
         return redirect(url_for('meter_reading', search=search_query))

@@ -14,12 +14,48 @@
     }
 
     @media print {
+        /* পেপারের সাইজ এবং মার্জিন সেট করা */
+        @page {
+            size: A4 landscape;
+            margin: 5mm;
+        }
+        
         body {
+            width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            background: #ffffff !important;
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
+            font-size: 11px;
+        } 
+
+        /* বেস লেআউটের নেভবার, বাটন বা অপ্রয়োজনীয় অংশ লুকাতে */
+        .no-print, .btn, nav, header, footer, .navbar {
+            display: none !important;
         }
+
+        /* শুধুমাত্র মূল বিল কন্টেইনার এবং এর ভেতরের সেকশন প্রিন্ট হবে */
+        #bill-container {
+            display: flex !important;
+            justify-content: space-between !important;
+            width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            background: #ffffff !important;
+        }
+
         .bill-section {
             background-color: #ffffff !important;
+            border: 1px solid #999 !important;
+            box-shadow: none !important;
+            width: 48% !important;
+            page-break-inside: avoid;
+        }
+
+        table { 
+            width: 100% !important; 
+            table-layout: fixed !important; 
         }
     }
 
@@ -182,7 +218,13 @@
             </tr>
             <tr>
                 <td class="lbl-text">গ্রাহক নাম:</td><td class="val-text">{{ bill.owner_name }}</td>
-                <td class="lbl-text">বিল নং:</td><td class="val-text">{{ bill.id }}</td>
+                <td class="lbl-text">বিল নং:</td><td class="val-text">{{ bill.bill_no }}</td>
+            </tr>
+            <tr>
+                <td class="lbl-text">বিলের মাস:</td>
+                <td class="val-text text-primary">{{ config.bill_month if config else 'N/A' }}</td>
+                <td class="lbl-text">অনুমোদিত লোড:</td>
+                <td class="val-text">{{ bill.allocated_load }} KW</td>
             </tr>
             <tr>
                 <td class="lbl-text">প্লাজার নাম:</td><td class="val-text">{{ bill.plaza_name }}</td>
@@ -234,9 +276,9 @@
         <!-- কালারফুল নোট সেকশন -->
         <div class="footer-note">
             <span style="font-weight: bold; color: #d32f2f;">নির্দেশাবলী:</span><br>
-            ১. {{ config['note_1'] if config and config['note_1'] else 'নির্দিষ্ট সময়ের মধ্যে বিল পরিশোধ করুন।' }}<br>
-            ২. {{ config['note_2'] if config and config['note_2'] else 'বিলম্ব হলে জরিমানা প্রযোজ্য হবে।' }}<br>
-            ৩. {{ config['note_3'] if config and config['note_3'] else 'যেকোনো প্রয়োজনে অফিস কর্তৃপক্ষের সাথে যোগাযোগ করুন।' }}
+            ১. {{ config.note_1 if config and config.note_1 else 'নির্দিষ্ট সময়ের মধ্যে বিল পরিশোধ করুন।' }}<br>
+            ২. {{ config.note_2 if config and config.note_2 else 'বিলম্ব হলে জরিমানা প্রযোজ্য হবে।' }}<br>
+            ৩. {{ config.note_3 if config and config.note_3 else 'যেকোনো প্রয়োজনে অফিস কর্তৃপক্ষের সাথে যোগাযোগ করুন।' }}
         </div>
         
         <!-- সিগনেচার সেকশন -->

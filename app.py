@@ -973,7 +973,7 @@ def view_bill(bill_id):
     conn = get_db_connection()
     conn.row_factory = sqlite3.Row
     
-    # ডাটাবেস থেকে বিল এবং কনফিগ দুটিই একই কানেকশনে নিয়ে নিন
+    # বিলের তথ্য আনা
     bill = conn.execute('''
         SELECT b.*, 
                c.owner_name, c.meter_no, c.plaza_name, c.floor_no, 
@@ -983,10 +983,10 @@ def view_bill(bill_id):
         WHERE b.id = ?
     ''', (bill_id,)).fetchone()
     
-    # কনফিগ ডাটা একই কানেকশনে আনা হলো
-    config_row = conn.execute('SELECT * FROM monthly_config LIMIT 1').fetchone()
+    # মাসিক কনফিগ টেবিল থেকে লেটেস্ট নোটগুলো নিশ্চিতভাবে নিয়ে আসা
+    config_row = conn.execute('SELECT note_1, note_2, note_3, bill_month FROM monthly_config ORDER BY id DESC LIMIT 1').fetchone()
     
-    conn.close() # সব কাজ শেষে কানেকশন বন্ধ করুন
+    conn.close() 
 
     if not bill:
         flash('বিলটি খুঁজে পাওয়া যায়নি!', 'danger')
@@ -1308,6 +1308,59 @@ def payment_portal():
 
     return render_template('payment_portal.html', amount=payable_amount, qr_path=qr_image_path, qr_link=dynamic_qr_link, id=c_id)
 
+@app.route('/customer/pay/<customer_id>')
+def public_payment_counter(customer_id):
+    conn = get_db_connection()
+    conn.row_factory = sqlite3.Row
+    
+    # গ্রাহক খুঁজে বের করা
+    customer = conn.execute('SELECT * FROM customers WHERE customer_id = ?', (customer_id,)).fetchone()
+    
+    if not customer:
+        conn.close()
+        return "গ্রাহক খুঁজে পাওয়া যায়নি!", 404
+        
+    # ঐ গ্রাহকের সর্বশেষ আনপেইড বা বকেয়া বিলের সব তথ্য আনা (due_date সহ)
+    latest_bill = conn.execute('''
+        SELECT id, total_payable, total_payable_after_due, due_date, status 
+        FROM bills 
+        WHERE customer_id = ? AND status != 'Paid' 
+        ORDER BY id DESC LIMIT 1
+    ''', (customer_id,)).fetchone()
+    
+    conn.close()
+    
+    payable_amount = 0
+    bill_id = None
+    
+    if latest_bill:
+        bill_id = latest_bill['id']
+        today = datetime.now().date()
+        due_date_str = latest_bill['due_date']
+        
+        is_expired = False
+        if due_date_str:
+            try:
+                due_date = datetime.strptime(str(due_date_str).strip(), '%Y-%m-%d').date()
+                if today > due_date:
+                    is_expired = True
+            except Exception as e:
+                try:
+                    due_date = datetime.strptime(str(due_date_str).strip(), '%d-%m-%Y').date()
+                    if today > due_date:
+                        is_expired = True
+                except Exception as e2:
+                    pass
+        
+        # মেয়াদ পার হয়ে গেলে late fee সহ টোটাল, না হলে মূল টোটাল দেখাবে
+        if is_expired and latest_bill['total_payable_after_due']:
+            payable_amount = latest_bill['total_payable_after_due']
+        else:
+            payable_amount = latest_bill['total_payable'] if latest_bill['total_payable'] else 0
+
+    # পেমেন্ট টেমপ্লেট রেন্ডার করা
+    return render_template('customer_payment.html', id=customer_id, amount=payable_amount, bill_id=bill_id)
+    
 @app.route('/submit_trxid', methods=['POST'])
 def submit_trxid():
     customer_id = request.form.get('customer_id')

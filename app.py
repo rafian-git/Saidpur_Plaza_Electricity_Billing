@@ -12,6 +12,7 @@ from flask import request, redirect, url_for, flash
 from werkzeug.utils import secure_filename
 from functools import wraps
 from flask import session, flash, redirect, url_for
+from flask import send_file, request
 
 # প্রজেক্টের মেইন ডিরেক্টরি সেটআপ
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -76,14 +77,31 @@ def login():
 def index():
     return redirect(url_for('customer_login')) # সরাসরি customer login পেজে রিডাইরেক্ট করা হলো
 
-@app.route('/generate_qr/<string:c_id>/<string:amount>')
-def generate_qr(c_id, amount):
-    data = f"bankqr://pay?merchant=Saidpur_Plaza&customer_id={c_id}&amount={amount}"
-    img = qrcode.make(data)
-    buf = io.BytesIO()
-    img.save(buf, format='PNG')
-    buf.seek(0)
-    return Response(buf.getvalue(), mimetype='image/png')
+@app.route('/generate_qr')
+def generate_qr():
+    # সরাসরি পেমেন্ট লিংক বা ডেটা রিসিভ করা
+    data = request.args.get('data')
+    if not data:
+        # যদি ডাটা না থাকে, তবে ডিফল্ট একটি লিংক বা কাস্টমার পোর্টাল বসিয়ে দেওয়া যেতে পারে
+        data = "https://bill.srtrading.com.bd/customer/portal/payment"
+        
+    # কিউআর কোড জেনারেট করা
+    qr = qrcode.QRCode(
+        version=1,
+        error_correction=qrcode.constants.ERROR_CORRECT_L,
+        box_size=10,
+        border=4,
+    )
+    qr.add_data(data)
+    qr.make(fit=True)
+    
+    img = qr.make_image(fill_color="black", back_color="white")
+    
+    buffer = BytesIO()
+    img.save(buffer, format="PNG")
+    buffer.seek(0)
+    
+    return send_file(buffer, mimetype='image/png')
 
 # ডাটাবেজ ইনিশিয়ালাইজেশন
 def init_db():
@@ -1320,7 +1338,7 @@ def public_payment_counter(customer_id):
         conn.close()
         return "গ্রাহক খুঁজে পাওয়া যায়নি!", 404
         
-    # ঐ গ্রাহকের সর্বশেষ আনপেইড বা বকেয়া বিলের সব তথ্য আনা (due_date সহ)
+    # ঐ গ্রাহকের সর্বশেষ আনপেইড বা বকেয়া বিলের সব তথ্য আনা
     latest_bill = conn.execute('''
         SELECT id, total_payable, total_payable_after_due, due_date, status 
         FROM bills 
@@ -1344,21 +1362,20 @@ def public_payment_counter(customer_id):
                 due_date = datetime.strptime(str(due_date_str).strip(), '%Y-%m-%d').date()
                 if today > due_date:
                     is_expired = True
-            except Exception as e:
+            except Exception:
                 try:
                     due_date = datetime.strptime(str(due_date_str).strip(), '%d-%m-%Y').date()
                     if today > due_date:
                         is_expired = True
-                except Exception as e2:
+                except Exception:
                     pass
         
-        # মেয়াদ পার হয়ে গেলে late fee সহ টোটাল, না হলে মূল টোটাল দেখাবে
         if is_expired and latest_bill['total_payable_after_due']:
             payable_amount = latest_bill['total_payable_after_due']
         else:
             payable_amount = latest_bill['total_payable'] if latest_bill['total_payable'] else 0
 
-    # পেমেন্ট টেমপ্লেট রেন্ডার করা
+    # সরাসরি পাবলিক পেমেন্ট টেমপ্লেট রেন্ডার করবে (কোনো লগইন লাগবে না)
     return render_template('customer_payment.html', id=customer_id, amount=payable_amount, bill_id=bill_id)
     
 @app.route('/submit_trxid', methods=['POST'])

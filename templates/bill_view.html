@@ -17,7 +17,7 @@
         /* পেপারের সাইজ এবং মার্জিন সেট করা */
         @page {
             size: A4 landscape;
-            margin: 5mm;
+            margin: 4mm;
         }
         
         body {
@@ -27,7 +27,7 @@
             background: #ffffff !important;
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
-            font-size: 11px;
+            font-size: 10px !important;
         } 
 
         /* বেস লেআউটের নেভবার, বাটন বা অপ্রয়োজনীয় অংশ লুকাতে */
@@ -35,11 +35,14 @@
             display: none !important;
         }
 
-        /* শুধুমাত্র মূল বিল কন্টেইনার এবং এর ভেতরের সেকশন প্রিন্ট হবে */
+        /* মূল বিল কন্টেইনার পাশাপাশি রাখার জন্য ফ্লেক্স */
         #bill-container {
             display: flex !important;
+            flex-direction: row !important;
             justify-content: space-between !important;
+            align-items: stretch !important;
             width: 100% !important;
+            height: auto !important;
             margin: 0 !important;
             padding: 0 !important;
             background: #ffffff !important;
@@ -47,19 +50,62 @@
 
         .bill-section {
             background-color: #ffffff !important;
-            border: 1px solid #999 !important;
+            border: 1px solid #555 !important;
             box-shadow: none !important;
-            width: 48% !important;
+            width: 49% !important;
+            max-width: 49% !important;
+            padding: 6px 10px !important;
+            margin: 0 !important;
             page-break-inside: avoid;
+            break-inside: avoid;
         }
 
         table { 
             width: 100% !important; 
             table-layout: fixed !important; 
         }
+
+        table td, table th {
+            padding-top: 1px !important;
+            padding-bottom: 1px !important;
+            padding-left: 4px !important;
+            padding-right: 4px !important;
+            line-height: 1.15 !important;
+            font-size: 9.5px !important;
+        }
+
+        table tr {
+            height: auto !important;
+        }
+
+        .footer-note { 
+            font-size: 8px !important; 
+            line-height: 1.2 !important;
+            margin-top: 4px !important; 
+            padding: 4px 6px !important; 
+            max-height: 50px !important;
+            overflow: hidden !important;
+        }
+
+        .signatures { 
+            margin-top: 8px !important; 
+            font-size: 8.5px !important; 
+        }
+
+        .footer-copyright {
+            text-align: center !important;
+            display: block !important;
+            width: 100% !important;
+            margin-top: 3px !important;
+            font-size: 8px !important;
+            height: 10px !important;
+            line-height: 10px !important;
+            color: #666 !important;
+            page-break-inside: avoid;
+        }
     }
 
-    /* টেবিলের স্টাইল ও প্যাডিং */
+    /* সাধারণ ব্রাউজার ভিউর স্টাইল */
     table td, table th {
         padding-top: 2px !important;
         padding-bottom: 2px !important;
@@ -72,56 +118,30 @@
         height: 20px;
     }
 
-    @media print {
-        .footer-copyright {
-            position: fixed;
-            bottom: 5mm;
-            left: 0;
-            width: 100%;
-            text-align: center;
-            font-size: 8px;
-        }
-        body {
-            margin-bottom: 20px;
-        }
-    }
-
-    @media print { 
-        @page { size: A4 landscape; margin: 5mm; } 
-        body { width: 100%; margin: 0; padding: 0; font-size: 12px; } 
-        .container { width: 100%; max-width: 100%; } 
-        table { width: 100%; table-layout: fixed; font-size: 11px; } 
-        .no-print, .btn { display: none !important; } 
-    }
-
-    /* --- কালারফুল টেক্সট ডিজাইন --- */
-    
-    /* ১. হেডার বা টাইটেলের কালার ডিজাইন */
     .bill-header { 
         text-align: center; 
-        margin-bottom: 8px; 
+        margin-bottom: 6px; 
     }
     .plaza-title {
-        color: #1e3c72; /* গাঢ় নীল */
-        font-size: 15px;
+        color: #1e3c72;
+        font-size: 14px;
         font-weight: bold;
         margin: 0;
     }
     .plaza-subtitle {
-        color: #555555; /* ছাই রঙ */
-        font-size: 12px;
+        color: #555555;
+        font-size: 11px;
         margin: 2px 0;
     }
     .bill-type-title {
-        color: #d9534f; /* আকর্ষণীয় লালচে বা মেরুন টাইপ */
-        font-size: 13px;
+        color: #d9534f;
+        font-size: 12px;
         font-weight: bold;
-        margin-top: 4px;
+        margin-top: 3px;
         text-transform: uppercase;
         letter-spacing: 0.5px;
     }
 
-    /* ২. বিল লেআউট ও টেবিল টেক্সট কালার */
     .bill-wrapper { 
         display: flex; 
         justify-content: space-between; 
@@ -136,60 +156,76 @@
     .bill-table { 
         width: 100%; 
         border-collapse: collapse; 
-        margin-top: 6px; 
+        margin-top: 4px; 
         table-layout: fixed; 
     }
     .bill-table td { 
         border: 1px solid #dcdcdc; 
         font-size: 11px; 
         word-wrap: break-word; 
-        color: #333333; /* মূল লেখার রঙ গাঢ় ধূসর/কালো */
+        color: #333333; 
     }
     
-    /* লেবেলগুলোর জন্য আলাদা হালকা প্রফেশনাল কালার */
     .lbl-text {
         color: #495057;
         font-weight: 500;
     }
-    /* ভ্যালু বা ডেটার জন্য গাঢ় কালার */
     .val-text {
         color: #000000;
         font-weight: 600;
     }
     
-    /* বিশেষ প্রদেয় অ্যামাউন্ট হাইলাইট কালার */
     .highlight-amount {
-        color: #b71c1c !important; /* ডিপ লাল */
+        color: #b71c1c !important;
         font-size: 12px;
     }
 
-    /* ৩. নিচের নোটের লেখা (অন্য কালার) */
     .footer-note { 
         font-size: 10px; 
-        margin-top: 8px; 
+        margin-top: 6px; 
         border: 1px dashed #b0bec5; 
-        background-color: #f8f9fa; /* একদম হালকা অফ-হোয়াইট ব্যাকগ্রাউন্ড */
-        color: #37474f; /* স্লেট ব্লু টাইপ নোটের কালার */
+        background-color: #f8f9fa; 
+        color: #37474f; 
         padding: 6px; 
-        min-height: 35px; 
         border-radius: 4px;
     }
     .footer-note b, .footer-note span {
-        color: #c62828; /* নোটের ভেدی পয়েন্ট বা রুলসগুলো সুন্দর দেখানোর জন্য */
+        color: #c62828; 
     }
 
-    /* ৪. স্বাক্ষর অংশ */
     .signatures { 
         display: flex; 
         justify-content: space-between; 
-        margin-top: 35px; 
+        margin-top: 20px; 
         font-size: 10px; 
         text-align: center; 
         color: #263238;
     }
+
+    /* সাধারণ ব্রাউজার ও প্রিন্টের জন্য কপিরাইট ফিক্স */
+    .footer-copyright {
+        text-align: center !important;
+        display: block !important;
+        width: 100% !important;
+        margin-top: 4px !important;
+        font-size: 7px !important; /* ফন্ট সাইজ ছোট করা হলো */
+        line-height: 1.1 !important;
+        color: #6c757d !important;
+        border-top: 1px solid #eee !important;
+        padding-top: 2px !important;
+    }
+
+    @media print {
+        .footer-copyright {
+            font-size: 7px !important;
+            margin-top: 3px !important;
+        }
+    }
 </style>
 
-<div class="no-print text-center my-3"><button onclick="window.print()" class="btn btn-primary fw-bold px-4">🖨️ প্রিন্ট করুন</button></div>
+<div class="no-print text-center my-3">
+    <button onclick="window.print()" class="btn btn-primary fw-bold px-4">🖨️ প্রিন্ট করুন</button>
+</div>
 
 <div id="bill-container" class="bill-wrapper">
     {% for title in ['গ্রাহক কপি', 'অফিস কপি'] %}
@@ -201,10 +237,11 @@
         </div>
 
         <!-- QR কোড সেকশন -->
-        <div class="qr-section text-center my-2">
-            <img src="{{ url_for('generate_qr', c_id=bill['customer_id'], amount=bill['total_payable']) }}" 
-                 alt="QR Code" style="width: 85px; height: 85px; border: 1px solid #eee; padding: 2px;">
-            <p style="font-size: 9px; color: #6c757d; margin: 2px 0 0 0;">স্ক্যান করে পরিশোধ করুন</p>
+        <div class="qr-section text-center my-1">
+            {% set payment_link = url_for('public_payment_counter', customer_id=bill.customer_id, _external=True) %}
+            <img src="{{ url_for('generate_qr', data=payment_link) }}" 
+                 alt="QR Code" style="width: 75px; height: 75px; border: 1px solid #eee; padding: 2px;">
+            <p style="font-size: 8.5px; color: #6c757d; margin: 2px 0 0 0;">স্ক্যান করে পরিশোধ করুন</p>
         </div>
 
         <table class="bill-table">
@@ -256,9 +293,8 @@
             </tr>
             <tr>
                 <td class="lbl-text">চলতি মাসের মোট:</td><td class="val-text">{{ "%.2f"|format(bill.current_month_total|float) }}</td>
-                <td class="lbl-text">বকেয়া:</td><td class="val-text text-warning-dark">{{ bill.arrears }}</td>
+                <td class="lbl-text">বকেয়া:</td><td class="val-text">{{ bill.arrears }}</td>
             </tr>
-            
             <tr>
                 <td colspan="2" class="lbl-text">মোট পরিশোধযোগ্য (বিনা জরিমানায়):</td>
                 <td colspan="2"><strong class="highlight-amount">{{ bill.total_payable }} ৳</strong></td>
@@ -273,7 +309,7 @@
             </tr>
         </table>
         
-        <!-- কালারফুল নোট সেকশন -->
+        <!-- নির্দেশাবলী সেকশন -->
         <div class="footer-note">
             <span style="font-weight: bold; color: #d32f2f;">নির্দেশাবলী:</span><br>
             ১. {{ config.note_1 if config and config.note_1 else 'নির্দিষ্ট সময়ের মধ্যে বিল পরিশোধ করুন।' }}<br>
@@ -295,6 +331,11 @@
                 <span style="color: #78909c;">__________</span><br>
                 <strong style="color: #455a64; font-size: 9px;">গ্রহীতা</strong>
             </div>
+        </div>
+
+        <!-- কপিরাইট সেকশন -->
+        <div class="footer-copyright">
+            &copy; ২০২৬ <strong>Wafeesoft</strong>। সর্বস্বত্ব সংরক্ষিত। | সৈয়দপুর প্লাজা বিলিং সিস্টেম
         </div>
     </div>
     {% endfor %}

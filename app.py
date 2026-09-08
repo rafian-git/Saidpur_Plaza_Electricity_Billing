@@ -1376,7 +1376,7 @@ def public_payment_counter(customer_id):
             payable_amount = latest_bill['total_payable'] if latest_bill['total_payable'] else 0
 
     # সরাসরি পাবলিক পেমেন্ট টেমপ্লেট রেন্ডার করবে (কোনো লগইন লাগবে না)
-    return render_template('customer_payment.html', id=customer_id, amount=payable_amount, bill_id=bill_id)
+    return render_template('payment_portal.html', id=customer_id, amount=payable_amount, bill_id=bill_id)
     
 @app.route('/submit_trxid', methods=['POST'])
 def submit_trxid():

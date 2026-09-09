@@ -9,8 +9,8 @@
             <p class="text-muted mb-0">গ্রাহকের নাম: <strong>{{ customer.owner_name }}</strong> | আইডি: <span class="badge bg-dark">{{ customer.customer_id }}</span></p>
         </div>
         <div>
-            <button onclick="window.print()" class="btn btn-outline-dark btn-sm fw-bold">🖨️ পেজ প্রিন্ট করুন</button>
-            <a href="{{ url_for('billing_dashboard') }}" class="btn btn-secondary btn-sm fw-bold">← ড্যাশবোর্ডে ফিরে যান</a>
+            <button onclick="window.print()" class="btn btn-outline-dark btn-sm fw-bold no-print">🖨️ পেজ প্রিন্ট করুন</button>
+            <a href="{{ url_for('customer_dashboard') }}" class="btn btn-secondary btn-sm fw-bold no-print">← ড্যাশবোর্ডে ফিরে যান</a>
         </div>
     </div>
     <hr>
@@ -54,7 +54,7 @@
                             <th>ইউনিট</th>
                             <th>মোট বিল</th>
                             <th>অবস্থা</th>
-                            <th>অ্যাকশন (প্রিন্ট / দেখুন)</th>
+                            <th class="no-print">অ্যাকশন (প্রিন্ট / দেখুন)</th>
                         </tr>
                     </thead>
                     <tbody class="text-center">
@@ -66,16 +66,18 @@
                             <td>
                                 {% if bill.status == 'Paid' %}
                                     <span class="badge bg-success">পরিশোধিত</span>
+                                {% elif bill.is_late %}
+                                    <span class="badge bg-warning text-dark">বিলম্বিত</span>
                                 {% else %}
                                     <span class="badge bg-danger">বকেয়া</span>
                                 {% endif %}
                             </td>
-                            <td>
-                                <!-- প্রতিটি বিল আলাদাভাবে দেখার এবং প্রিন্ট করার বাটন -->
-                                <a href="{{ url_for('view_bill', bill_id=bill.id) }}" target="_blank" class="btn btn-view-bill btn-sm rounded-pill px-3">
+                            <td class="no-print">
+                                <!-- গ্রাহকের জন্য আলাদা বিল ভিউ এবং প্রিন্ট বাটন -->
+                                <a href="{{ url_for('view_bill', bill_id=bill.id) }}" target="_blank" class="btn btn-outline-primary btn-sm rounded-pill px-3 mb-1 mb-md-0">
                                     👁️ বিল দেখুন
                                 </a>
-                                <a href="{{ url_for('view_bill', bill_id=bill.id) }}" target="_blank" class="btn btn-primary btn-sm fw-bold px-3">
+                                <a href="{{ url_for('view_bill', bill_id=bill.id) }}" target="_blank" class="btn btn-primary btn-sm fw-bold rounded-pill px-3">
                                     🖨️ বিল প্রিন্ট করুন
                                 </a>
                             </td>

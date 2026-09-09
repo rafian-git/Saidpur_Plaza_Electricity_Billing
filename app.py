@@ -986,12 +986,19 @@ def monthly_config():
 
 # 📄 ঘ. বিল ভিউ বাটন
 @app.route('/bill/view/<int:bill_id>')
-@role_required(['admin', 'moderator', 'viewer'])
 def view_bill(bill_id):
+    # এডমিন, মডারেটর কিংবা কাস্টমার উভয়ের জন্যই এক্সেস নিশ্চিত করা
+    role = session.get('role')
+    customer_id = session.get('customer_id')
+    
+    if not role and not customer_id:
+        flash('দয়া করে প্রথমে লগইন করুন!', 'danger')
+        return redirect(url_for('customer_login'))
+        
     conn = get_db_connection()
     conn.row_factory = sqlite3.Row
     
-    # বিলের তথ্য আনা
+    # বিলের তথ্য এবং গ্রাহক আইডি আনা
     bill = conn.execute('''
         SELECT b.*, 
                c.owner_name, c.meter_no, c.plaza_name, c.floor_no, 
@@ -1001,16 +1008,23 @@ def view_bill(bill_id):
         WHERE b.id = ?
     ''', (bill_id,)).fetchone()
     
-    # মাসিক কনফিগ টেবিল থেকে লেটেস্ট নোটগুলো নিশ্চিতভাবে নিয়ে আসা
+    # সিকিউরিটি চেক: কাস্টমার হলে সে কেবল নিজের বিলই দেখতে পারবে
+    if customer_id and bill and str(bill['customer_id']) != str(customer_id):
+        conn.close()
+        flash('আপনার এই বিলটি দেখার অনুমতি নেই!', 'danger')
+        return redirect(url_for('customer_dashboard'))
+
     config_row = conn.execute('SELECT note_1, note_2, note_3, bill_month FROM monthly_config ORDER BY id DESC LIMIT 1').fetchone()
-    
     conn.close() 
 
     if not bill:
         flash('বিলটি খুঁজে পাওয়া যায়নি!', 'danger')
-        return redirect(url_for('meter_reading'))
+        # সঠিকভাবে রিডাইরেক্ট হ্যান্ডেল করা
+        return redirect(url_for('customer_view_bills' if customer_id else 'meter_reading'))
 
-    return render_template('bill_view.html', bill=bill, config=config_row)
+    username = session.get('username', 'কর্তৃপক্ষ')
+
+    return render_template('bill_view.html', bill=bill, config=config_row, username=username)
 
 @app.context_processor
 def inject_user_role():
@@ -1171,8 +1185,12 @@ def customer_dashboard():
     conn = get_db_connection()
     c_id = session['customer_id']
     
-    # বর্তমান তারিখ (আজকের তারিখ)
-    today = datetime.now().date()
+    # বর্তমান তারিখ
+    today_date = datetime.now().date()
+    
+    # বর্তমান বা সর্বশেষ বিল মাস কনফিগারেশন বের করা
+    config = conn.execute("SELECT * FROM monthly_config ORDER BY id DESC LIMIT 1").fetchone()
+    current_bill_month = config['bill_month'] if config and 'bill_month' in config.keys() else None
 
     # গ্রাহকের বর্তমান অবস্থা
     cust = conn.execute('SELECT * FROM customers WHERE customer_id=?', (c_id,)).fetchone()
@@ -1182,53 +1200,61 @@ def customer_dashboard():
     
     bills = []
     for b in raw_bills:
-        # ডিকশনারিতে রূপান্তর করে নেওয়া যেন মডিফাই করা যায়
         bill_dict = dict(b)
         
-        # ডিফল্টভাবে মোট প্রদেয় বিল
-        display_amt = bill_dict['total_payable_after_due'] if bill_dict.get('total_payable_after_due') else bill_dict['total_payable']
+        # ডিউ ডেট পার্স করা
+        due_date_str = bill_dict.get('due_date')
+        due_date_obj = today_date
+        if due_date_str:
+            for fmt in ('%d-%m-%Y', '%Y-%m-%d'):
+                try:
+                    due_date_obj = datetime.strptime(str(due_date_str).strip(), fmt).date()
+                    break
+                except ValueError:
+                    continue
         
-        # শেষ তারিখ চেক করার লজিক
-        if bill_dict.get('due_date') and bill_dict.get('status') not in ('Paid', 'Pending'):
-            try:
-                due_dt = datetime.strptime(str(bill_dict['due_date']), '%Y-%m-%d').date()
-                if today <= due_dt:
-                    # যদি ডেট পার না হয়ে থাকে, তবে ডিউ ছাড়া মূল অ্যামাউন্ট দেখানো হয়
-                    display_amt = bill_dict['total_payable']
-            except Exception:
-                pass
-                
+        # পূর্ববর্তী মাস কি না বা ডেট পার হয়েছে কি না তা যাচাই
+        is_previous_month = current_bill_month and bill_dict.get('bill_month') != current_bill_month
+        
+        if bill_dict.get('status') == 'Paid':
+            bill_dict['is_late'] = False
+            display_amt = bill_dict.get('paid_amount') or bill_dict['total_payable']
+        elif is_previous_month or today_date > due_date_obj:
+            bill_dict['is_late'] = True
+            display_amt = math.ceil(bill_dict['total_payable_after_due']) if bill_dict.get('total_payable_after_due') else bill_dict['total_payable']
+        else:
+            bill_dict['is_late'] = False
+            display_amt = math.ceil(bill_dict['total_payable']) if bill_dict.get('total_payable') else 0
+            
         bill_dict['payable_display'] = display_amt
         bills.append(bill_dict)
     
-    # চলতি বা সর্বশেষ পেন্ডিং বিলটি বের করা (যেটির ওপর ভিত্তি করে ড্যাশবোর্ডে বড় অ্যামাউন্টটি দেখায়)
+    # চলতি বা সর্বশেষ পেন্ডিং বিলটি বের করা (ড্যাশবোর্ডের বড় অ্যামাউন্টের জন্য)
     current_bill = conn.execute("SELECT * FROM bills WHERE customer_id=? AND status != 'Paid' ORDER BY id DESC LIMIT 1", (c_id,)).fetchone()
     
     display_amount = 0
     if current_bill:
-        # ডেটাবেজে শেষ তারিখের কলামটি কী নামে আছে (যেমন: due_date বা last_date) তা এখানে চেক করবেন
-        due_date_str = current_bill['due_date'] if 'due_date' in current_bill.keys() else None
+        # sqlite3.Row কে ডিকশনারিতে রূপান্তর করে নেওয়া নিরাপদ
+        bill_dict = dict(current_bill)
         
+        due_date_str = bill_dict.get('due_date')
         is_expired = False
-        if due_date_str:
-            try:
-                # ডেট ফরম্যাট আপনার সিস্টেম অনুযায়ী (যেমন: YYYY-MM-DD বা DD-MM-YYYY)
-                due_date = datetime.strptime(str(due_date_str), '%Y-%m-%d').date()
-                if today > due_date:
-                    is_expired = True
-            except Exception:
-                try:
-                    due_date = datetime.strptime(str(due_date_str), '%d-%m-%Y').date()
-                    if today > due_date:
-                        is_expired = True
-                except Exception:
-                    pass
         
-        # যদি শেষ তারিখ পার হয়ে যায় অথবা বিল পেন্ডিং থাকে, তবে ডিউ সহ অ্যামাউন্ট দেখানো হয়
-        if (is_expired or current_bill['status'] == 'Pending') and current_bill['total_payable_after_due']:
-            display_amount = current_bill['total_payable_after_due']
+        if due_date_str:
+            for fmt in ('%Y-%m-%d', '%d-%m-%Y'):
+                try:
+                    due_date = datetime.strptime(str(due_date_str).strip(), fmt).date()
+                    if today_date > due_date:
+                        is_expired = True
+                    break
+                except ValueError:
+                    continue
+        
+        # শর্ত অনুযায়ী অ্যামাউন্ট নির্ধারণ
+        if (is_expired or bill_dict.get('status') == 'Pending') and bill_dict.get('total_payable_after_due'):
+            display_amount = math.ceil(bill_dict['total_payable_after_due'])
         else:
-            display_amount = current_bill['total_payable']
+            display_amount = math.ceil(bill_dict['total_payable']) if bill_dict.get('total_payable') else 0
     
     conn.close()
 
@@ -1239,15 +1265,20 @@ def customer_dashboard():
                            bills=bills,
                            display_amount=display_amount)
 
-@app.route('/customer/portal/view_bills') # অথবা আপনার রাউটের নাম অনুযায়ী
+@app.route('/customer/portal/view_bills')
 def customer_view_bills():
-    customer_id = session.get('customer_id') # সেশন থেকে আইডি নেওয়া
+    customer_id = session.get('customer_id')
     
     if not customer_id:
         return redirect(url_for('customer_login'))
         
     conn = get_db_connection()
+    conn.row_factory = sqlite3.Row # নিশ্চিত করার জন্য যেন রো ডিকশনারির মতো ব্যবহার করা যায়
     
+    # বর্তমান বা সর্বশেষ বিল মাস কনফিগারেশন বের করা
+    config = conn.execute("SELECT * FROM monthly_config ORDER BY id DESC LIMIT 1").fetchone()
+    current_bill_month = config['bill_month'] if config and 'bill_month' in config.keys() else None
+
     # গ্রাহকের তথ্য আনা
     customer = conn.execute("SELECT * FROM customers WHERE customer_id = ?", (customer_id,)).fetchone()
     
@@ -1260,22 +1291,37 @@ def customer_view_bills():
     
     conn.close()
 
-    today = datetime.now().date()
+    today_date = datetime.now().date()
     history = []
+    
     for b in raw_history:
         bill_dict = dict(b)
-        display_amt = bill_dict['total_payable_after_due'] if bill_dict.get('total_payable_after_due') else bill_dict['total_payable']
-        if bill_dict.get('due_date') and bill_dict.get('status') not in ('Paid', 'Pending'):
-            try:
-                due_dt = datetime.strptime(str(bill_dict['due_date']), '%Y-%m-%d').date()
-                if today <= due_dt:
-                    display_amt = bill_dict['total_payable']
-            except Exception:
-                pass
+        
+        due_date_str = bill_dict.get('due_date')
+        due_date_obj = today_date
+        if due_date_str:
+            for fmt in ('%d-%m-%Y', '%Y-%m-%d'):
+                try:
+                    due_date_obj = datetime.strptime(str(due_date_str).strip(), fmt).date()
+                    break
+                except ValueError:
+                    continue
+        
+        is_previous_month = current_bill_month and bill_dict.get('bill_month') != current_bill_month
+        
+        if bill_dict.get('status') == 'Paid':
+            bill_dict['is_late'] = False
+            display_amt = bill_dict.get('paid_amount') or bill_dict.get('total_payable', 0)
+        elif is_previous_month or today_date > due_date_obj:
+            bill_dict['is_late'] = True
+            display_amt = math.ceil(bill_dict['total_payable_after_due']) if bill_dict.get('total_payable_after_due') else bill_dict.get('total_payable', 0)
+        else:
+            bill_dict['is_late'] = False
+            display_amt = math.ceil(bill_dict['total_payable']) if bill_dict.get('total_payable') else 0
+            
         bill_dict['payable_display'] = display_amt
         history.append(bill_dict)
     
-    # অত্যন্ত গুরুত্বপূর্ণ: এখানে 'history=history' পাস করতেই হবে, কারণ আপনার এইচটিএমএলে 'history' লুপ ব্যবহার করা হয়েছে
     return render_template('customer_view_bills.html', customer=customer, history=history)
 
 @app.route('/customer/portal/payment')

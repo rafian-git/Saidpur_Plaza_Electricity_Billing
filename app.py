@@ -919,13 +919,13 @@ def daily_collection():
     selected_date = request.args.get('date')
     
     conn = get_db_connection()
+    conn.row_factory = sqlite3.Row # নিশ্চিত করার জন্য যেন রো-কে ডিকশনারির মতো ব্যবহার করা যায়
     
     # যদি কোনো তারিখ সিলেক্ট করা না থাকে, তবে আজকের তারিখ ডিফল্ট ধরবে (DD-MM-YYYY ফরম্যাটে)
     if not selected_date:
         search_date = datetime.now().strftime('%d-%m-%Y')
     else:
         try:
-            # ইনপুট ফরম্যাট যেকোনোটি হোক না কেন, সেটিকে ডেট অবজেক্টে রূপান্তর করে কাঙ্ক্ষিত ফরম্যাটে (DD-MM-YYYY) নিয়ে আসা
             for fmt in ('%Y-%m-%d', '%d-%b-%Y', '%d-%m-%Y', '%d-%m-%y'):
                 try:
                     dt = datetime.strptime(selected_date, fmt)
@@ -938,15 +938,17 @@ def daily_collection():
         except Exception:
             search_date = selected_date
 
-    # ✅ সমাধান: এখানে selected_date এর পরিবর্তে কনভার்ட் করা 'search_date' দিয়ে কুয়েরি করতে হবে
-    collections = conn.execute("SELECT * FROM payments WHERE payment_date = ?", (search_date,)).fetchall()
+    # ✅ সমাধান: এখানে status = 'Paid' শর্ত যুক্ত করা হয়েছে, ফলে রিজেক্ট হওয়া পেমেন্ট আর আসবে না
+    collections = conn.execute("""
+        SELECT * FROM payments 
+        WHERE payment_date = ? AND status = 'Paid'
+    """, (search_date,)).fetchall()
     
-    # পাইথন দিয়ে মোট কালেকশনের পরিমাণ যোগ করা
+    # পাইথন দিয়ে শুধুমাত্র সফল (Paid) কালেকশনগুলোর মোট পরিমাণ যোগ করা
     total_collection = sum(row['amount'] for row in collections) if collections else 0.0
     
     conn.close()
     
-    # টেমপ্লেটে সঠিক ডেটা এবং selected_date এর জায়গায় search_date পাঠাতে পারেন যেন ইনপুটেও ঠিক তারিখ দেখায়
     return render_template('daily_collection.html', collections=collections, total_collection=total_collection, selected_date=search_date)
 
 # 📅 গ. মাসিক বিলের তথ্য ইনপুট বাটন

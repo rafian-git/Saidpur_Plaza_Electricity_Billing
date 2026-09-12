@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container-fluid mt-4">
+    <!-- ব্যাক বাটন -->
+    <div class="mb-3">
+        <a href="{{ url_for('dashboard') }}" class="btn btn-secondary btn-sm">⬅️ ড্যাশবোর্ডে ফিরে যান</a>
+    </div>
+
+    <!-- মোবাইল মেসেজিং সেকশন মডিউল -->
+    <div class="card shadow mb-4">
+        <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">📱 মোবাইল মেসেজিং প্যানেল</h5>
+            <!-- একসাথে সকল গ্রাহককে মেসেজ পাঠানোর বাল্ক বাটন -->
+            {% if session.get('role') == 'admin' %}
+            <form action="{{ url_for('send_message') }}" method="POST" class="d-inline">
+                <input type="hidden" name="action_type" value="bulk">
+                <input type="hidden" name="bulk_type" value="billing">
+                <button type="submit" class="btn btn-sm btn-light fw-bold" onclick="return confirm('সকল গ্রাহককে একসাথে বিলিং মেসেজ পাঠাতে চান?');">📥 সবাইকে বিলিং মেসেজ পাঠান</button>
+            </form>
+            {% endif %}
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-bordered table-striped align-middle">
+                    <thead class="table-secondary text-center">
+                        <tr>
+                            <th>আইডি</th>
+                            <th>নাম</th>
+                            <th>মোবাইল নম্বর</th>
+                            <th>বর্তমান বিল</th>
+                            <th>শেষ তারিখ</th>
+                            <th>মেসেজ অ্যাকশনসমূহ</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in messaging_customers %}
+                        <tr>
+                            <td class="fw-bold">{{ item.customer_id }}</td>
+                            <td>{{ item.owner_name }}</td>
+                            <td>{{ item.mobile_no or 'সংরক্ষিত নেই' }}</td>
+                            <td>{{ item.total_payable or 0 }} ৳</td>
+                            <td>{{ item.due_date or 'N/A' }}</td>
+                            <td class="text-center">
+                                <!-- ১. বিলিং মেসেজ বাটন -->
+                                <form action="{{ url_for('send_message') }}" method="POST" class="d-inline">
+                                    <input type="hidden" name="action_type" value="billing">
+                                    <input type="hidden" name="customer_id" value="{{ item.customer_id }}">
+                                    <button type="submit" class="btn btn-sm btn-primary fw-bold mb-1 {% if item.billing_msg_sent == 1 %}disabled bg-secondary{% endif %}" {% if item.billing_msg_sent == 1 %}disabled title="ইতিমধ্যে পাঠানো হয়েছে"{% endif %}>
+                                        ✉️ বিলিং মেসেজ
+                                    </button>
+                                </form>
+
+                                <!-- ২. বিলম্বিত মেসেজ বাটন -->
+                                <form action="{{ url_for('send_message') }}" method="POST" class="d-inline">
+                                    <input type="hidden" name="action_type" value="overdue">
+                                    <input type="hidden" name="customer_id" value="{{ item.customer_id }}">
+                                    <button type="submit" class="btn btn-sm btn-warning fw-bold mb-1 {% if not item.is_overdue %}disabled{% endif %}" {% if not item.is_overdue %}disabled title="বাকি পরিশোধের শেষ তারিখ এখনো পার হয়নি"{% endif %}>
+                                        ⚠️ বিলম্বিত মেসেজ
+                                    </button>
+                                </form>
+
+                                <!-- ৩. কাস্টমাইজ মেসেজ বাটন (শুধুমাত্র এডমিনের জন্য) -->
+                                {% if session.get('role') == 'admin' %}
+                                <button type="button" class="btn btn-sm btn-dark fw-bold mb-1" data-bs-toggle="modal" data-bs-target="#customMsgModal{{ item.customer_id }}">
+                                    💬 কাস্টম মেসেজ
+                                </button>
+
+                                <!-- কাস্টম মেসেজ মডাল -->
+                                <div class="modal fade" id="customMsgModal{{ item.customer_id }}" tabindex="-1">
+                                    <div class="modal-dialog">
+                                        <form action="{{ url_for('send_message') }}" method="POST">
+                                            <div class="modal-content">
+                                                <div class="modal-header bg-dark text-white">
+                                                    <h5 class="modal-title">কাস্টম মেসেজ পাঠান: {{ item.customer_id }}</h5>
+                                                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                                                </div>
+                                                <div class="modal-body text-start">
+                                                    <input type="hidden" name="action_type" value="custom">
+                                                    <input type="hidden" name="customer_id" value="{{ item.customer_id }}">
+                                                    <div class="mb-3">
+                                                        <label class="form-label fw-bold">মেসেজ লিখুন:</label>
+                                                        <textarea name="custom_text" class="form-control" rows="4" required placeholder="আপনার কাস্টম মেসেজ এখানে লিখুন..."></textarea>
+                                                    </div>
+                                                </div>
+                                                <div class="modal-footer">
+                                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">বন্ধ করুন</button>
+                                                    <button type="submit" class="btn btn-success">মেসেজ পাঠান</button>
+                                                </div>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="6" class="text-center text-muted py-3">কোনো গ্রাহকের ডাটা পাওয়া যায়নি।</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

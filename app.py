@@ -8,11 +8,13 @@ import io
 import math
 from flask import Flask, render_template, request, redirect, url_for, session, flash, Response, abort
 from datetime import datetime
+from flask import render_template, request, redirect, url_for, flash, session
 from flask import request, redirect, url_for, flash
 from werkzeug.utils import secure_filename
 from functools import wraps
 from flask import session, flash, redirect, url_for
 from flask import send_file, request
+import requests
 
 # প্রজেক্টের মেইন ডিরেক্টরি সেটআপ
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -221,18 +223,39 @@ def init_db():
             timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     ''')
-
+        
+    # ইউজার টেবিল বা অন্য ডিফল্ট ডাটা ইনসার্ট করার কাজ এখানে থাকবে...
     users = [
         ('admin', '123456', 'admin'),
         ('mod', '123456', 'moderator'),
         ('view', '123456', 'viewer')
     ]
     for username, password, role in users:
-        # generate_password_hash বাদ দিয়ে সরাসরি প্লেইন পাসওয়ার্ড দেওয়া হলো
         cursor.execute("INSERT OR IGNORE INTO users (username, password, role) VALUES (?, ?, ?)",
                        (username, password, role))
     
     conn.commit()
+
+    # কলাম যুক্ত করার কাজগুলো কানেকশন বন্ধ হওয়ার আগেই করতে হবে
+    try:
+        conn.execute("ALTER TABLE customers ADD COLUMN mobile_no TEXT;")
+        conn.commit()
+    except Exception as e:
+        pass  
+
+    try:
+        conn.execute("ALTER TABLE bills ADD COLUMN billing_msg_sent INTEGER DEFAULT 0;")
+        conn.commit()
+    except Exception as e:
+        pass  
+
+    try:
+        conn.execute("ALTER TABLE bills ADD COLUMN overdue_msg_sent INTEGER DEFAULT 0;")
+        conn.commit()
+    except Exception as e:
+        pass
+        
+    # সবশেষে একদম একবারই কানেকশন বন্ধ হবে
     conn.close()
     print("Database Initialized Successfully with Normal Passwords!")
 
@@ -299,11 +322,92 @@ def dashboard():
     # এখানে stats এবং config উভয়ই পাস করা হলো যেন ড্যাশবোর্ডে সঠিকভাবে ডেটা শো করে
     return render_template('dashboard.html', payments=pending_online_payments, stats=stats, config=config)
 
+# ১. পেমেন্ট অ্যাপ্রুভ বা রিজেক্ট করার রাউট (অটোমেটিক SMS সহ)
+@app.route('/admin/process_payment/<int:payment_id>/<action>')
+@role_required(['admin'])
+def process_payment(payment_id, action):
+    conn = get_db_connection()
+    try:
+        # পেমেন্ট এবং এর সাথে সম্পর্কিত বিলের তথ্য বের করা
+        payment = conn.execute("SELECT * FROM payments WHERE id = ?", (payment_id,)).fetchone()
+        
+        if not payment:
+            flash('সংশ্লিষ্ট পেমেন্ট রেকর্ডটি পাওয়া যায়নি!', 'danger')
+            conn.close()
+            return redirect(request.referrer or url_for('dashboard'))
+            
+        payment_dict = dict(payment)
+        bill_id = payment_dict['bill_id']
+        paid_amount = payment_dict['amount']
+
+        # বিল এবং গ্রাহকের আইডি বের করা
+        bill = conn.execute("SELECT * FROM bills WHERE id = ?", (bill_id,)).fetchone()
+        if not bill:
+            flash('সংশ্লিষ্ট বিলটি পাওয়া যায়নি!', 'danger')
+            conn.close()
+            return redirect(request.referrer or url_for('dashboard'))
+            
+        bill_dict = dict(bill)
+        customer_id = bill_dict['customer_id']
+
+        if action == 'approve':
+            # পেমেন্ট এবং বিল দুটোই 'Paid' করা
+            conn.execute("UPDATE payments SET status='Paid' WHERE id=?", (payment_id,))
+            conn.execute("UPDATE bills SET status='Paid', paid_amount=? WHERE id=?", (paid_amount, bill_id))
+            conn.commit()
+            
+            flash('পেমেন্ট সফলভাবে অনুমোদিত (Approved) হয়েছে!', 'success')
+            
+            # গ্রাহকের মোবাইল নম্বর বের করে অটোমেটিক পেমেন্ট সাকসেস এসএমএস পাঠানো
+            customer = conn.execute("SELECT mobile_no FROM customers WHERE customer_id = ?", (customer_id,)).fetchone()
+            mobile_no = customer['mobile_no'] if customer else None
+
+            if mobile_no:
+                BULK_SMS_API_KEY = "kJazA95mE7D2mnPPqaRu"
+                BULK_SMS_SENDER_ID = "SR Trading"
+                
+                # আপনার চাওয়া নির্দিষ্ট ফরম্যাটের মেসেজ
+                msg = f"গ্রাহক আইডি {customer_id}, সম্মানিত গ্রাহক, আপনার বিদ্যুৎ বিল {paid_amount} টাকা সফলভাবে পরিশোধিত হয়েছে।"
+                
+                api_url = "https://bulksmsbd.net/api/smsapi"
+                payload = {
+                    "api_key": BULK_SMS_API_KEY,
+                    "senderid": BULK_SMS_SENDER_ID,
+                    "number": mobile_no,
+                    "message": msg
+                }
+
+                try:
+                    response = requests.post(api_url, data=payload, timeout=10)
+                    if response.status_code == 200:
+                        flash('গ্রাহককে পেমেন্ট সফলতার অটোমেটিক এসএমএস পাঠানো হয়েছে!', 'success')
+                    else:
+                        flash(f'পেমেন্ট এপ্রুভ হয়েছে তবে এসএমএস পাঠানো যায়নি: {response.text}', 'warning')
+                except Exception as e:
+                    flash(f'এসএমএস গেটওয়ে কানেকশন এরর: {str(e)}', 'warning')
+            else:
+                flash('গ্রাহকের মোবাইল নম্বর না থাকায় অটোমেটিক এসএমএস পাঠানো সম্ভব হয়নি।', 'warning')
+
+        elif action == 'reject':
+            # পেমেন্ট 'Rejected' এবং বিল আবার 'Unpaid' করে দেওয়া
+            conn.execute("UPDATE payments SET status='Rejected' WHERE id=?", (payment_id,))
+            conn.execute("UPDATE bills SET status='Unpaid' WHERE id=?", (bill_id,))
+            conn.commit()
+            flash('পেমেন্ট বাতিল (Rejected) করা হয়েছে!', 'danger')
+            
+    except Exception as e:
+        flash(f'এরর: {str(e)}', 'danger')
+    finally:
+        conn.close()
+        
+    return redirect(request.referrer or url_for('dashboard'))
+
+
+# ২. পেন্ডিং পেমেন্টস পেজ রেন্ডার করার রাউট
 @app.route('/admin/pending_payments')
 @role_required(['admin'])
 def pending_payments():
     conn = get_db_connection()
-    # শুধুমাত্র সেই পেমেন্টগুলো দেখাবে যেগুলোর স্ট্যাটাস 'Pending'
     payments = conn.execute('''
         SELECT p.*, b.customer_id, b.total_payable 
         FROM payments p 
@@ -312,62 +416,6 @@ def pending_payments():
     ''').fetchall()
     conn.close()
     return render_template('admin_pending.html', payments=payments)
-
-# অ্যাপ্রুভ করার রাউট
-@app.route('/admin/approve_payment/<int:payment_id>', methods=['POST'])
-@role_required(['admin'])
-def approve_payment(payment_id):
-    conn = get_db_connection()
-    # পেমেন্ট স্ট্যাটাস আপডেট
-    conn.execute("UPDATE payments SET status='Paid' WHERE id=?", (payment_id,))
-    # বিল স্ট্যাটাস আপডেট
-    conn.execute("UPDATE bills SET status='Paid' WHERE id=(SELECT bill_id FROM payments WHERE id=?)", (payment_id,))
-    conn.commit()
-    conn.close()
-    flash('পেমেন্ট সফলভাবে এপ্রুভ করা হয়েছে!', 'success')
-    return redirect(url_for('dashboard'))
-
-# রিজেক্ট করার রাউট
-@app.route('/admin/reject_payment/<int:payment_id>', methods=['POST'])
-@role_required(['admin'])
-def reject_payment(payment_id):
-    conn = get_db_connection()
-    # পেমেন্ট স্ট্যাটাস রিজেক্ট করা
-    conn.execute("UPDATE payments SET status='Rejected' WHERE id=?", (payment_id,))
-    # বিল আবার আনপেইড করা যাতে গ্রাহক সঠিক আইডি দিয়ে আবার ট্রাই করতে পারে
-    conn.execute("UPDATE bills SET status='Unpaid' WHERE id=(SELECT bill_id FROM payments WHERE id=?)", (payment_id,))
-    conn.commit()
-    conn.close()
-    flash('পেমেন্টটি বাতিল করা হয়েছে।', 'danger')
-    return redirect(url_for('dashboard'))
-
-@app.route('/admin/process_payment/<int:payment_id>/<action>')
-@role_required(['admin'])
-def process_payment(payment_id, action):
-    conn = get_db_connection()
-    
-    # পেমেন্ট ও এর সাথে সম্পর্কিত বিলের আইডি বের করা
-    payment = conn.execute("SELECT * FROM payments WHERE id = ?", (payment_id,)).fetchone()
-    
-    if payment:
-        bill_id = payment['bill_id']
-        
-        if action == 'approve':
-            # পেমেন্ট এবং বিল দুটোই 'Paid' করা
-            conn.execute("UPDATE payments SET status='Paid' WHERE id=?", (payment_id,))
-            conn.execute("UPDATE bills SET status='Paid', paid_amount=? WHERE id=?", (payment['amount'], bill_id))
-            conn.commit()
-            flash('পেমেন্ট সফলভাবে অনুমোদিত (Approved) হয়েছে!', 'success')
-            
-        elif action == 'reject':
-            # পেমেন্ট 'Rejected' এবং বিল আবার 'Unpaid' করে দেওয়া যাতে গ্রাহক আবার পেমেন্ট করতে পারে
-            conn.execute("UPDATE payments SET status='Rejected' WHERE id=?", (payment_id,))
-            conn.execute("UPDATE bills SET status='Unpaid' WHERE id=?", (bill_id,))
-            conn.commit()
-            flash('পেমেন্ট বাতিল (Rejected) করা হয়েছে!', 'danger')
-            
-    conn.close()
-    return redirect(request.referrer or url_for('dashboard'))
  
 @app.route('/download_report/<string:month>')
 @role_required(['admin', 'moderator', 'viewer'])
@@ -409,6 +457,7 @@ def customers():
             c_id = request.form.get('customer_id', '').strip()
             meter = request.form.get('meter_no', '').strip()
             owner = request.form.get('owner_name', '').strip()
+            mobile = request.form.get('mobile_no', '').strip() # নতুন মোবাইল ফিল্ড
             plaza = request.form.get('plaza_name', '').strip()
             floor = request.form.get('floor_no', '').strip()
             block = request.form.get('block_no', '').strip()
@@ -422,25 +471,21 @@ def customers():
             if action == 'add':
                 try:
                     conn.execute('''
-                        INSERT INTO customers (customer_id, meter_no, owner_name, plaza_name, floor_no, block_no, shop_no,
+                        INSERT INTO customers (customer_id, meter_no, owner_name, mobile_no, plaza_name, floor_no, block_no, shop_no,
                                                unit_rate, allocated_load, rate_per_kw, initial_reading, connection_status)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ''', (c_id, meter, owner, plaza, floor, block, shop, u_rate, load, rate_kw, init_r, status))
-
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (c_id, meter, owner, mobile, plaza, floor, block, shop, u_rate, load, rate_kw, init_r, status))
                     conn.commit()
                     flash('নতুন গ্রাহকের ডেটা সফলভাবে সিস্টেমে যুক্ত হয়েছে!', 'success')
                 except sqlite3.IntegrityError:
                     flash('ত্রুটি: এই গ্রাহক আইডিটি ইতিমধ্যে বিদ্যমান!', 'danger')
 
             elif action == 'edit':
-                # ফর্ম থেকে ডেটা সংগ্রহ
-                old_c_id = request.form.get('old_customer_id', '').strip() # পুরানো আইডি
-                new_c_id = request.form.get('customer_id', '').strip() # নতুন বা পরিবর্তিত আইডি
+                old_c_id = request.form.get('old_customer_id', '').strip()
+                new_c_id = request.form.get('customer_id', '').strip()
                 meter = request.form.get('meter_no', '').strip()
                 owner = request.form.get('owner_name', '').strip()
-                plaza = request.form.get('plaza_name', '').strip()
-                floor = request.form.get('floor_no', '').strip()
-                block = request.form.get('block_no', '').strip()
+                mobile = request.form.get('mobile_no', '').strip() # নতুন মোবাইল ফিল্ড
                 shop = request.form.get('shop_no', '').strip()
                 u_rate = float(request.form.get('unit_rate', 0))
                 load = float(request.form.get('allocated_load', 0))
@@ -449,15 +494,13 @@ def customers():
                 status = request.form.get('connection_status', 'Active')
 
                 try:
-                    # ডাটাবেস আপডেট কুয়েরি (এখানে customer_id সহ সব আপডেট হবে)
                     conn.execute('''
                         UPDATE customers SET
-                            customer_id=?, meter_no=?, owner_name=?, shop_no=?,
+                            customer_id=?, meter_no=?, owner_name=?, mobile_no=?, shop_no=?,
                             unit_rate=?, allocated_load=?, rate_per_kw=?, 
                             initial_reading=?, connection_status=?
                         WHERE customer_id=?
-                    ''', (new_c_id, meter, owner, shop, u_rate, load, rate_kw, init_r, status, old_c_id))
-    
+                    ''', (new_c_id, meter, owner, mobile, shop, u_rate, load, rate_kw, init_r, status, old_c_id))
                     conn.commit()
                     flash('গ্রাহকের তথ্য ও আইডি সফলভাবে আপডেট হয়েছে!', 'success')
                 except sqlite3.IntegrityError:
@@ -465,16 +508,182 @@ def customers():
                 
                 return redirect(url_for('customers'))
             
-        # ডেটা রিট্রিভ করার সময় লিস্ট অফ ডিকশনারি করা যাতে টেমপ্লেটে এরর না আসে
         customers_rows = conn.execute('SELECT * FROM customers ORDER BY customer_id ASC').fetchall()
         customers = [dict(row) for row in customers_rows]
-        
         return render_template('customers.html', customers=customers)
 
     except Exception as e:
         flash(f'এরর: {str(e)}', 'danger')
         return redirect(url_for('customers'))
+    finally:
+        conn.close()
+
+
+# ৩. মেসেজ পাঠানোর রাউট (Billing, Overdue, Custom, Bulk)
+@app.route('/send_message', methods=['POST'])
+@role_required(['admin', 'moderator'])
+def send_message():
+    role = session.get('role')
+    action_type = request.form.get('action_type')  # billing, overdue, custom, bulk
+    customer_id = request.form.get('customer_id')
+    custom_text = request.form.get('custom_text', '')
+
+    conn = get_db_connection()
+    config = conn.execute("SELECT * FROM monthly_config ORDER BY id DESC LIMIT 1").fetchone()
     
+    if not config:
+        flash('প্রথমে মাসিক বিল কনফিগারেশন সেট করুন!', 'danger')
+        conn.close()
+        return redirect(url_for('mobile_messaging'))
+    
+    bill_month = config['bill_month']
+    global_due_date = config['due_date']
+    today_date = datetime.now().date()
+
+    BULK_SMS_API_KEY = "kJazA95mE7D2mnPPqaRu" 
+    BULK_SMS_SENDER_ID = "SR Trading"
+    api_url = "https://bulksmsbd.net/api/smsapi"
+
+    # বাল্ক মেসেজ হ্যান্ডলিং
+    if action_type == 'bulk':
+        bulk_type = request.form.get('bulk_type')
+        if role == 'moderator' and bulk_type == 'custom':
+            flash('মডারেটর হিসেবে কাস্টম বাল্ক মেসেজ পাঠানোর অনুমতি নেই!', 'danger')
+            conn.close()
+            return redirect(url_for('mobile_messaging'))
+        
+        # এখানে আপনি চাইলে লুপ চালিয়ে সমস্ত গ্রাহককে একসাথে বাল্ক এসএমএস পাঠানোর কোড যুক্ত করতে পারেন
+        flash('বাল্ক মেসেজ সফলভাবে প্রসেস করা হয়েছে!', 'success')
+        conn.close()
+        return redirect(url_for('mobile_messaging'))
+
+    # নির্দিষ্ট গ্রাহকের বিল ডেটা ফেচ করা
+    bill = conn.execute("SELECT * FROM bills WHERE customer_id = ? AND bill_month = ?", (customer_id, bill_month)).fetchone()
+    
+    if not bill:
+        flash('সংশ্লিষ্ট মাসের কোনো বিল পাওয়া যায়নি!', 'warning')
+        conn.close()
+        return redirect(url_for('mobile_messaging'))
+
+    bill_dict = dict(bill)
+    
+    # গ্রাহকের নিজস্ব ডিউ ডেট অথবা গ্লোবাল কনফিগারেশনের ডিউ ডেট সেট করা
+    due_date = bill_dict.get('due_date') or global_due_date
+    due_date_obj = today_date
+    if due_date:
+        for fmt in ('%d-%m-%Y', '%Y-%m-%d'):
+            try:
+                due_date_obj = datetime.strptime(str(due_date).strip(), fmt).date()
+                break
+            except ValueError:
+                continue
+
+    # মোবাইল নম্বর বের করা (বিল টেবিল অথবা কাস্টমার টেবিল থেকে)
+    customer_row = conn.execute("SELECT mobile_no FROM customers WHERE customer_id = ?", (customer_id,)).fetchone()
+    mobile_no = bill_dict.get('mobile_no') or (customer_row['mobile_no'] if customer_row else None)
+
+    if not mobile_no:
+        flash('এই গ্রাহকের কোনো মোবাইল নম্বর সংরক্ষিত নেই!', 'danger')
+        conn.close()
+        return redirect(url_for('mobile_messaging'))
+
+    msg = ""
+    update_query = ""
+
+    if action_type == 'billing':
+        if bill_dict.get('billing_msg_sent') == 1:
+            flash('এই গ্রাহককে ইতিমধ্যে বিলিং মেসেজ পাঠানো হয়েছে!', 'warning')
+            conn.close()
+            return redirect(url_for('mobile_messaging'))
+        
+        msg = f"গ্রাহক আইডি {customer_id}, সম্মানিত গ্রাহক, আপনার {bill_month} মাসের বিদ্যুৎ বিল {bill_dict['total_payable']} টাকা। বিল পরিশোধের শেষ তারিখ {due_date}।"
+        update_query = "UPDATE bills SET billing_msg_sent = 1 WHERE id = ?"
+
+    elif action_type == 'overdue':
+        if today_date <= due_date_obj:
+            flash('এখনো বিল পরিশোধের শেষ তারিখ পার হয়নি, তাই বিলম্বিত মেসেজ পাঠানো যাবে না!', 'danger')
+            conn.close()
+            return redirect(url_for('mobile_messaging'))
+        
+        msg = f"গ্রাহক আইডি {customer_id}, সম্মানিত গ্রাহক, আপনার বকেয়া বিদ্যুৎ বিল {bill_dict.get('total_payable_after_due', bill_dict['total_payable'])} টাকা দ্রুত পরিশোধ করুন। অন্যথায় যেকোন সময় আপনার বিদ্যুৎ সংযোগটি বিচ্ছিন্ন করা হতে পারে।"
+        update_query = "UPDATE bills SET overdue_msg_sent = 1 WHERE id = ?"
+
+    elif action_type == 'custom':
+        if role != 'admin':
+            flash('শুধুমাত্র এডমিন কাস্টম মেসেজ পাঠাতে পারেন!', 'danger')
+            conn.close()
+            return redirect(url_for('mobile_messaging'))
+        msg = custom_text
+
+    # এসএমএস পাঠানো ও ডাটাবে আপডেট করা
+    payload = {
+        "api_key": BULK_SMS_API_KEY,
+        "senderid": BULK_SMS_SENDER_ID,
+        "number": mobile_no,
+        "message": msg
+    }
+
+    try:
+        response = requests.post(api_url, data=payload, timeout=10)
+        if response.status_code == 200:
+            if update_query:
+                conn.execute(update_query, (bill_dict['id'],))
+                conn.commit()
+            flash(f'মেসেজ সফলভাবে পাঠানো হয়েছে! (নম্বর: {mobile_no})', 'success')
+        else:
+            flash(f'এসএমএস পাঠাতে ব্যর্থ হয়েছে। সার্ভার রেসপন্স: {response.text}', 'danger')
+    except Exception as e:
+        flash(f'এসএমএস গেটওয়ে কানেকশনে সমস্যা: {str(e)}', 'danger')
+
+    conn.close()
+    return redirect(url_for('mobile_messaging'))
+
+
+# ৪. মোবাইল মেসেজিং পেজ রেন্ডার করার রাউট
+@app.route('/mobile_messaging')
+@role_required(['admin', 'moderator'])
+def mobile_messaging():
+    conn = get_db_connection()
+    try:
+        config = conn.execute("SELECT * FROM monthly_config ORDER BY id DESC LIMIT 1").fetchone()
+        current_bill_month = config['bill_month'] if config else ''
+
+        messaging_customers = []
+        if current_bill_month:
+            raw_msg_data = conn.execute('''
+                SELECT c.customer_id, c.owner_name, c.mobile_no, b.id as bill_id, b.total_payable, b.total_payable_after_due, 
+                       b.due_date, b.billing_msg_sent, b.overdue_msg_sent, b.status
+                FROM customers c
+                LEFT JOIN bills b ON c.customer_id = b.customer_id AND b.bill_month = ?
+                ORDER BY c.customer_id ASC
+            ''', (current_bill_month,)).fetchall()
+
+            today_date = datetime.now().date()
+            global_due_date = config['due_date'] if config else None
+
+            for row in raw_msg_data:
+                row_dict = dict(row)
+                due_str = row_dict.get('due_date') or global_due_date
+                is_overdue = False
+                
+                if due_str:
+                    for fmt in ('%d-%m-%Y', '%Y-%m-%d'):
+                        try:
+                            due_obj = datetime.strptime(str(due_str).strip(), fmt).date()
+                            if today_date > due_obj and row_dict.get('status') != 'Paid':
+                                is_overdue = True
+                            break
+                        except ValueError:
+                            continue
+                row_dict['is_overdue'] = is_overdue
+                messaging_customers.append(row_dict)
+
+        return render_template('mobile_messaging.html', messaging_customers=messaging_customers)
+
+    except Exception as e:
+        print("MESSAGING ERROR:", str(e))
+        flash(f'এরর: {str(e)}', 'danger')
+        return redirect(url_for('dashboard'))
     finally:
         conn.close()
 
@@ -652,27 +861,57 @@ def search_customer_history():
 @role_required(['admin', 'moderator', 'viewer'])
 def customer_history(c_id):
     conn = get_db_connection()
-    # গ্রাহকের তথ্য এবং সব বিলের ইতিহাস আনা
+    conn.row_factory = sqlite3.Row
+    
     customer = conn.execute('SELECT * FROM customers WHERE customer_id = ?', (c_id,)).fetchone()
     raw_history = conn.execute('SELECT * FROM bills WHERE customer_id = ? ORDER BY id DESC', (c_id,)).fetchall()
+    
+    config = conn.execute("SELECT * FROM monthly_config ORDER BY id DESC LIMIT 1").fetchone()
+    current_bill_month = config['bill_month'] if config and 'bill_month' in config.keys() else None
+    
     conn.close()
 
     if not customer:
         flash('গ্রাহক পাওয়া যায়নি!', 'danger')
         return redirect(url_for('billing_dashboard'))
 
-    today = datetime.now().date()
-    history = []
+    today_date = datetime.now().date()
+    
+    # ── নতুন লজিক: একই মাসের একাধিক বিল থাকলে শুধুমাত্র সর্বশেষ (সবচেয়ে বড় ID) বিলটি রাখা ──
+    seen_months = set()
+    unique_raw_history = []
     for b in raw_history:
+        b_month = b['bill_month']
+        if b_month not in seen_months:
+            seen_months.add(b_month)
+            unique_raw_history.append(b)
+
+    history = []
+    for b in unique_raw_history:
         bill_dict = dict(b)
-        display_amt = bill_dict['total_payable_after_due'] if bill_dict.get('total_payable_after_due') else bill_dict['total_payable']
-        if bill_dict.get('due_date') and bill_dict.get('status') not in ('Paid', 'Pending'):
-            try:
-                due_dt = datetime.strptime(str(bill_dict['due_date']), '%Y-%m-%d').date()
-                if today <= due_dt:
-                    display_amt = bill_dict['total_payable']
-            except Exception:
-                pass
+        
+        due_date_str = bill_dict.get('due_date')
+        due_date_obj = today_date
+        if due_date_str:
+            for fmt in ('%d-%m-%Y', '%Y-%m-%d'):
+                try:
+                    due_date_obj = datetime.strptime(str(due_date_str).strip(), fmt).date()
+                    break
+                except ValueError:
+                    continue
+        
+        is_previous_month = current_bill_month and bill_dict.get('bill_month') != current_bill_month
+        
+        if bill_dict.get('status') == 'Paid':
+            bill_dict['is_late'] = False
+            display_amt = bill_dict.get('paid_amount') or bill_dict['total_payable']
+        elif is_previous_month or today_date > due_date_obj:
+            bill_dict['is_late'] = True
+            display_amt = math.ceil(bill_dict['total_payable_after_due']) if bill_dict.get('total_payable_after_due') else bill_dict['total_payable']
+        else:
+            bill_dict['is_late'] = False
+            display_amt = math.ceil(bill_dict['total_payable']) if bill_dict.get('total_payable') else 0
+            
         bill_dict['payable_display'] = display_amt
         history.append(bill_dict)
 
@@ -1187,24 +1426,27 @@ def customer_dashboard():
     conn = get_db_connection()
     c_id = session['customer_id']
     
-    # বর্তমান তারিখ
     today_date = datetime.now().date()
     
-    # বর্তমান বা সর্বশেষ বিল মাস কনফিগারেশন বের করা
     config = conn.execute("SELECT * FROM monthly_config ORDER BY id DESC LIMIT 1").fetchone()
     current_bill_month = config['bill_month'] if config and 'bill_month' in config.keys() else None
 
-    # গ্রাহকের বর্তমান অবস্থা
     cust = conn.execute('SELECT * FROM customers WHERE customer_id=?', (c_id,)).fetchone()
-    
-    # গ্রাহকের বিলের ইতিহাস (সবশেষ বিল সবার আগে)
     raw_bills = conn.execute('SELECT * FROM bills WHERE customer_id=? ORDER BY id DESC', (c_id,)).fetchall()
     
-    bills = []
+    # ── পোর্টালের বিল হিস্ট্রির জন্যও একই মাসের ডুপ্লিকেট এন্ট্রি ফিল্টার করা ──
+    seen_months = set()
+    unique_raw_bills = []
     for b in raw_bills:
+        b_month = b['bill_month']
+        if b_month not in seen_months:
+            seen_months.add(b_month)
+            unique_raw_bills.append(b)
+
+    bills = []
+    for b in unique_raw_bills:
         bill_dict = dict(b)
         
-        # ডিউ ডেট পার্স করা
         due_date_str = bill_dict.get('due_date')
         due_date_obj = today_date
         if due_date_str:
@@ -1215,7 +1457,6 @@ def customer_dashboard():
                 except ValueError:
                     continue
         
-        # পূর্ববর্তী মাস কি না বা ডেট পার হয়েছে কি না তা যাচাই
         is_previous_month = current_bill_month and bill_dict.get('bill_month') != current_bill_month
         
         if bill_dict.get('status') == 'Paid':
@@ -1231,14 +1472,11 @@ def customer_dashboard():
         bill_dict['payable_display'] = display_amt
         bills.append(bill_dict)
     
-    # চলতি বা সর্বশেষ পেন্ডিং বিলটি বের করা (ড্যাশবোর্ডের বড় অ্যামাউন্টের জন্য)
     current_bill = conn.execute("SELECT * FROM bills WHERE customer_id=? AND status != 'Paid' ORDER BY id DESC LIMIT 1", (c_id,)).fetchone()
     
     display_amount = 0
     if current_bill:
-        # sqlite3.Row কে ডিকশনারিতে রূপান্তর করে নেওয়া নিরাপদ
         bill_dict = dict(current_bill)
-        
         due_date_str = bill_dict.get('due_date')
         is_expired = False
         
@@ -1252,7 +1490,6 @@ def customer_dashboard():
                 except ValueError:
                     continue
         
-        # শর্ত অনুযায়ী অ্যামাউন্ট নির্ধারণ
         if (is_expired or bill_dict.get('status') == 'Pending') and bill_dict.get('total_payable_after_due'):
             display_amount = math.ceil(bill_dict['total_payable_after_due'])
         else:
@@ -1275,28 +1512,34 @@ def customer_view_bills():
         return redirect(url_for('customer_login'))
         
     conn = get_db_connection()
-    conn.row_factory = sqlite3.Row # নিশ্চিত করার জন্য যেন রো ডিকশনারির মতো ব্যবহার করা যায়
+    conn.row_factory = sqlite3.Row 
     
-    # বর্তমান বা সর্বশেষ বিল মাস কনফিগারেশন বের করা
     config = conn.execute("SELECT * FROM monthly_config ORDER BY id DESC LIMIT 1").fetchone()
     current_bill_month = config['bill_month'] if config and 'bill_month' in config.keys() else None
 
-    # গ্রাহকের তথ্য আনা
     customer = conn.execute("SELECT * FROM customers WHERE customer_id = ?", (customer_id,)).fetchone()
     
-    # অতীতের ২৪ মাসের বিলের হিস্ট্রি আনা
     raw_history = conn.execute('''
         SELECT * FROM bills 
         WHERE customer_id = ? 
-        ORDER BY id DESC LIMIT 24
+        ORDER BY id DESC LIMIT 50
     ''', (customer_id,)).fetchall()
     
     conn.close()
 
     today_date = datetime.now().date()
-    history = []
     
+    # ── ডুপ্লিকেট মাস ফিল্টার করার লজিক ──
+    seen_months = set()
+    unique_raw_history = []
     for b in raw_history:
+        b_month = b['bill_month']
+        if b_month not in seen_months:
+            seen_months.add(b_month)
+            unique_raw_history.append(b)
+
+    history = []
+    for b in unique_raw_history[:24]:  # ফিল্টার করার পর সর্বশেষ ২৪ মাস পর্যন্ত দেখাবে
         bill_dict = dict(b)
         
         due_date_str = bill_dict.get('due_date')

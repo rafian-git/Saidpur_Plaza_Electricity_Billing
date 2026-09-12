@@ -14,6 +14,7 @@
         <div class="row g-3">
             <div class="col-md-3"><input type="text" name="customer_id" class="form-control" placeholder="গ্রাহক আইডি" required></div>
             <div class="col-md-3"><input type="text" name="owner_name" class="form-control" placeholder="মালিকের নাম" required></div>
+            <div class="col-md-3"><input type="text" name="mobile_no" class="form-control" placeholder="মোবাইল নম্বর" required></div>
             <div class="col-md-3"><input type="text" name="meter_no" class="form-control" placeholder="মিটার নং" required></div>
             <div class="col-md-3"><input type="text" name="plaza_name" class="form-control" placeholder="প্লাজার নাম" required></div>
             <div class="col-md-3"><input type="text" name="floor_no" class="form-control" placeholder="ফ্লোর নং" required></div>
@@ -81,6 +82,10 @@
                                     <div class="col-md-6">
                                         <label class="fw-bold">মালিকের নাম</label>
                                         <input type="text" name="owner_name" class="form-control" value="{{ cust.owner_name }}" required>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="fw-bold">মোবাইল নম্বর</label>
+                                        <input type="text" name="mobile_no" class="form-control" value="{{ cust.mobile_no }}">
                                     </div>
                                     <div class="col-md-6">
                                         <label class="fw-bold">মিটার নং</label>

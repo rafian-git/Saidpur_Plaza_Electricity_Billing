@@ -518,128 +518,7 @@ def customers():
     finally:
         conn.close()
 
-
-# ৩. মেসেজ পাঠানোর রাউট (Billing, Overdue, Custom, Bulk)
-@app.route('/send_message', methods=['POST'])
-@role_required(['admin', 'moderator'])
-def send_message():
-    role = session.get('role')
-    action_type = request.form.get('action_type')  # billing, overdue, custom, bulk
-    customer_id = request.form.get('customer_id')
-    custom_text = request.form.get('custom_text', '')
-
-    conn = get_db_connection()
-    config = conn.execute("SELECT * FROM monthly_config ORDER BY id DESC LIMIT 1").fetchone()
-    
-    if not config:
-        flash('প্রথমে মাসিক বিল কনফিগারেশন সেট করুন!', 'danger')
-        conn.close()
-        return redirect(url_for('mobile_messaging'))
-    
-    bill_month = config['bill_month']
-    global_due_date = config['due_date']
-    today_date = datetime.now().date()
-
-    BULK_SMS_API_KEY = "kJazA95mE7D2mnPPqaRu" 
-    BULK_SMS_SENDER_ID = "SR Trading"
-    api_url = "https://bulksmsbd.net/api/smsapi"
-
-    # বাল্ক মেসেজ হ্যান্ডলিং
-    if action_type == 'bulk':
-        bulk_type = request.form.get('bulk_type')
-        if role == 'moderator' and bulk_type == 'custom':
-            flash('মডারেটর হিসেবে কাস্টম বাল্ক মেসেজ পাঠানোর অনুমতি নেই!', 'danger')
-            conn.close()
-            return redirect(url_for('mobile_messaging'))
-        
-        # এখানে আপনি চাইলে লুপ চালিয়ে সমস্ত গ্রাহককে একসাথে বাল্ক এসএমএস পাঠানোর কোড যুক্ত করতে পারেন
-        flash('বাল্ক মেসেজ সফলভাবে প্রসেস করা হয়েছে!', 'success')
-        conn.close()
-        return redirect(url_for('mobile_messaging'))
-
-    # নির্দিষ্ট গ্রাহকের বিল ডেটা ফেচ করা
-    bill = conn.execute("SELECT * FROM bills WHERE customer_id = ? AND bill_month = ?", (customer_id, bill_month)).fetchone()
-    
-    if not bill:
-        flash('সংশ্লিষ্ট মাসের কোনো বিল পাওয়া যায়নি!', 'warning')
-        conn.close()
-        return redirect(url_for('mobile_messaging'))
-
-    bill_dict = dict(bill)
-    
-    # গ্রাহকের নিজস্ব ডিউ ডেট অথবা গ্লোবাল কনফিগারেশনের ডিউ ডেট সেট করা
-    due_date = bill_dict.get('due_date') or global_due_date
-    due_date_obj = today_date
-    if due_date:
-        for fmt in ('%d-%m-%Y', '%Y-%m-%d'):
-            try:
-                due_date_obj = datetime.strptime(str(due_date).strip(), fmt).date()
-                break
-            except ValueError:
-                continue
-
-    # মোবাইল নম্বর বের করা (বিল টেবিল অথবা কাস্টমার টেবিল থেকে)
-    customer_row = conn.execute("SELECT mobile_no FROM customers WHERE customer_id = ?", (customer_id,)).fetchone()
-    mobile_no = bill_dict.get('mobile_no') or (customer_row['mobile_no'] if customer_row else None)
-
-    if not mobile_no:
-        flash('এই গ্রাহকের কোনো মোবাইল নম্বর সংরক্ষিত নেই!', 'danger')
-        conn.close()
-        return redirect(url_for('mobile_messaging'))
-
-    msg = ""
-    update_query = ""
-
-    if action_type == 'billing':
-        if bill_dict.get('billing_msg_sent') == 1:
-            flash('এই গ্রাহককে ইতিমধ্যে বিলিং মেসেজ পাঠানো হয়েছে!', 'warning')
-            conn.close()
-            return redirect(url_for('mobile_messaging'))
-        
-        msg = f"গ্রাহক আইডি {customer_id}, সম্মানিত গ্রাহক, আপনার {bill_month} মাসের বিদ্যুৎ বিল {bill_dict['total_payable']} টাকা। বিল পরিশোধের শেষ তারিখ {due_date}।"
-        update_query = "UPDATE bills SET billing_msg_sent = 1 WHERE id = ?"
-
-    elif action_type == 'overdue':
-        if today_date <= due_date_obj:
-            flash('এখনো বিল পরিশোধের শেষ তারিখ পার হয়নি, তাই বিলম্বিত মেসেজ পাঠানো যাবে না!', 'danger')
-            conn.close()
-            return redirect(url_for('mobile_messaging'))
-        
-        msg = f"গ্রাহক আইডি {customer_id}, সম্মানিত গ্রাহক, আপনার বকেয়া বিদ্যুৎ বিল {bill_dict.get('total_payable_after_due', bill_dict['total_payable'])} টাকা দ্রুত পরিশোধ করুন। অন্যথায় যেকোন সময় আপনার বিদ্যুৎ সংযোগটি বিচ্ছিন্ন করা হতে পারে।"
-        update_query = "UPDATE bills SET overdue_msg_sent = 1 WHERE id = ?"
-
-    elif action_type == 'custom':
-        if role != 'admin':
-            flash('শুধুমাত্র এডমিন কাস্টম মেসেজ পাঠাতে পারেন!', 'danger')
-            conn.close()
-            return redirect(url_for('mobile_messaging'))
-        msg = custom_text
-
-    # এসএমএস পাঠানো ও ডাটাবে আপডেট করা
-    payload = {
-        "api_key": BULK_SMS_API_KEY,
-        "senderid": BULK_SMS_SENDER_ID,
-        "number": mobile_no,
-        "message": msg
-    }
-
-    try:
-        response = requests.post(api_url, data=payload, timeout=10)
-        if response.status_code == 200:
-            if update_query:
-                conn.execute(update_query, (bill_dict['id'],))
-                conn.commit()
-            flash(f'মেসেজ সফলভাবে পাঠানো হয়েছে! (নম্বর: {mobile_no})', 'success')
-        else:
-            flash(f'এসএমএস পাঠাতে ব্যর্থ হয়েছে। সার্ভার রেসপন্স: {response.text}', 'danger')
-    except Exception as e:
-        flash(f'এসএমএস গেটওয়ে কানেকশনে সমস্যা: {str(e)}', 'danger')
-
-    conn.close()
-    return redirect(url_for('mobile_messaging'))
-
-
-# ৪. মোবাইল মেসেজিং পেজ রেন্ডার করার রাউট
+# মোবাইল মেসেজিং প্যানেল পেজ রেন্ডার করার রাউট
 @app.route('/mobile_messaging')
 @role_required(['admin', 'moderator'])
 def mobile_messaging():
@@ -686,6 +565,176 @@ def mobile_messaging():
         return redirect(url_for('dashboard'))
     finally:
         conn.close()
+
+# ৩. মেসেজ পাঠানোর রাউট (Billing, Overdue, Custom, Bulk)
+@app.route('/send_message', methods=['POST'])
+@role_required(['admin', 'moderator'])
+def send_message():
+    role = session.get('role')
+    action_type = request.form.get('action_type')  # billing, overdue, custom, bulk
+    customer_id = request.form.get('customer_id')
+    custom_text = request.form.get('custom_text', '')
+
+    conn = get_db_connection()
+    config = conn.execute("SELECT * FROM monthly_config ORDER BY id DESC LIMIT 1").fetchone()
+    
+    if not config:
+        flash('প্রথমে মাসিক বিল কনফিগারেশন সেট করুন!', 'danger')
+        conn.close()
+        return redirect(url_for('mobile_messaging'))
+    
+    bill_month = config['bill_month']
+    global_due_date = config['due_date']
+    today_date = datetime.now().date()
+
+    BULK_SMS_API_KEY = "kJazA95mE7D2mnPPqaRu" 
+    BULK_SMS_SENDER_ID = "SR Trading"
+    api_url = "https://bulksmsbd.net/api/smsapi"
+
+    # ==========================================
+    # বাল্ক মেসেজ হ্যান্ডলিং (সকলকে একসাথে পাঠানো)
+    # ==========================================
+    if action_type == 'bulk':
+        bulk_type = request.form.get('bulk_type') # billing অথবা custom হতে পারে
+        
+        if role == 'moderator' and bulk_type == 'custom':
+            flash('মডারেটর হিসেবে কাস্টম বাল্ক মেসেজ পাঠানোর অনুমতি নেই!', 'danger')
+            conn.close()
+            return redirect(url_for('mobile_messaging'))
+        
+        # বর্তমান মাসের সকল গ্রাহক এবং তাদের বিলের তথ্য ফেচ করা
+        all_customers_bills = conn.execute('''
+            SELECT c.customer_id, c.mobile_no, b.id as bill_id, b.total_payable, b.billing_msg_sent
+            FROM customers c
+            LEFT JOIN bills b ON c.customer_id = b.customer_id AND b.bill_month = ?
+            WHERE c.mobile_no IS NOT NULL AND c.mobile_no != ''
+        ''', (bill_month,)).fetchall()
+
+        success_count = 0
+        fail_count = 0
+
+        for row in all_customers_bills:
+            row_dict = dict(row)
+            mobile_no = row_dict['mobile_no']
+            msg = ""
+            update_sql = ""
+
+            if bulk_type == 'billing':
+                # যদি ইতিমধ্যে বিলিং মেসেজ পাঠানো না হয়ে থাকে
+                if row_dict.get('billing_msg_sent') != 1 and row_dict.get('bill_id'):
+                    due_date = global_due_date
+                    msg = f"গ্রাহক আইডি {row_dict['customer_id']}, সম্মানিত গ্রাহক, আপনার {bill_month} মাসের বিদ্যুৎ বিল {row_dict['total_payable']} টাকা। বিল পরিশোধের শেষ তারিখ {due_date}।"
+                    update_sql = "UPDATE bills SET billing_msg_sent = 1 WHERE id = ?"
+                else:
+                    continue # ইতিমধ্যে পাঠানো থাকলে বা বিল না থাকলে স্কিপ করবে
+
+            elif bulk_type == 'custom':
+                if not custom_text.strip():
+                    break
+                msg = custom_text
+
+            if msg:
+                payload = {
+                    "api_key": BULK_SMS_API_KEY,
+                    "senderid": BULK_SMS_SENDER_ID,
+                    "number": mobile_no,
+                    "message": msg
+                }
+                try:
+                    response = requests.post(api_url, data=payload, timeout=10)
+                    if response.status_code == 200:
+                        success_count += 1
+                        if update_sql and row_dict.get('bill_id'):
+                            conn.execute(update_sql, (row_dict['bill_id'],))
+                    else:
+                        fail_count += 1
+                except Exception:
+                    fail_count += 1
+
+        conn.commit()
+        conn.close()
+        flash(f'বাল্ক মেসেজ পাঠানো সম্পন্ন হয়েছে! সফল: {success_count}টি, ব্যর্থ/স্কিপ: {fail_count}টি', 'success')
+        return redirect(url_for('mobile_messaging'))
+
+    # ==========================================
+    # একক (Single) গ্রাহকের মেসেজ হ্যান্ডলিং
+    # ==========================================
+    bill = conn.execute("SELECT * FROM bills WHERE customer_id = ? AND bill_month = ?", (customer_id, bill_month)).fetchone()
+    
+    if not bill:
+        flash('সংশ্লিষ্ট মাসের কোনো বিল পাওয়া যায়নি!', 'warning')
+        conn.close()
+        return redirect(url_for('mobile_messaging'))
+
+    bill_dict = dict(bill)
+    
+    due_date = bill_dict.get('due_date') or global_due_date
+    due_date_obj = today_date
+    if due_date:
+        for fmt in ('%d-%m-%Y', '%Y-%m-%d'):
+            try:
+                due_date_obj = datetime.strptime(str(due_date).strip(), fmt).date()
+                break
+            except ValueError:
+                continue
+
+    customer_row = conn.execute("SELECT mobile_no FROM customers WHERE customer_id = ?", (customer_id,)).fetchone()
+    mobile_no = bill_dict.get('mobile_no') or (customer_row['mobile_no'] if customer_row else None)
+
+    if not mobile_no:
+        flash('এই গ্রাহকের কোনো মোবাইল নম্বর সংরক্ষিত নেই!', 'danger')
+        conn.close()
+        return redirect(url_for('mobile_messaging'))
+
+    msg = ""
+    update_query = ""
+
+    if action_type == 'billing':
+        if bill_dict.get('billing_msg_sent') == 1:
+            flash('এই গ্রাহককে ইতিমধ্যে বিলিং মেসেজ পাঠানো হয়েছে!', 'warning')
+            conn.close()
+            return redirect(url_for('mobile_messaging'))
+        
+        msg = f"গ্রাহক আইডি {customer_id}, সম্মানিত গ্রাহক, আপনার {bill_month} মাসের বিদ্যুৎ বিল {bill_dict['total_payable']} টাকা। বিল পরিশোধের শেষ তারিখ {due_date}।"
+        update_query = "UPDATE bills SET billing_msg_sent = 1 WHERE id = ?"
+
+    elif action_type == 'overdue':
+        if today_date <= due_date_obj:
+            flash('এখনো বিল পরিশোধের শেষ তারিখ পার হয়নি, তাই বিলম্বিত মেসেজ পাঠানো যাবে না!', 'danger')
+            conn.close()
+            return redirect(url_for('mobile_messaging'))
+        
+        msg = f"গ্রাহক আইডি {customer_id}, সম্মানিত গ্রাহক, আপনার বকেয়া বিদ্যুৎ বিল {bill_dict.get('total_payable_after_due', bill_dict['total_payable'])} টাকা দ্রুত পরিশোধ করুন। অন্যথায় যেকোন সময় আপনার বিদ্যুৎ সংযোগটি বিচ্ছিন্ন করা হতে পারে।"
+        update_query = "UPDATE bills SET overdue_msg_sent = 1 WHERE id = ?"
+
+    elif action_type == 'custom':
+        if role != 'admin':
+            flash('শুধুমাত্র এডমিন কাস্টম মেসেজ পাঠাতে পারেন!', 'danger')
+            conn.close()
+            return redirect(url_for('mobile_messaging'))
+        msg = custom_text
+
+    payload = {
+        "api_key": BULK_SMS_API_KEY,
+        "senderid": BULK_SMS_SENDER_ID,
+        "number": mobile_no,
+        "message": msg
+    }
+
+    try:
+        response = requests.post(api_url, data=payload, timeout=10)
+        if response.status_code == 200:
+            if update_query:
+                conn.execute(update_query, (bill_dict['id'],))
+                conn.commit()
+            flash(f'মেসেজ সফলভাবে পাঠানো হয়েছে! (নম্বর: {mobile_no})', 'success')
+        else:
+            flash(f'এসএমএস পাঠাতে ব্যর্থ হয়েছে। সার্ভার রেসপন্স: {response.text}', 'danger')
+    except Exception as e:
+        flash(f'এসএমএস গেটওয়ে কানেকশনে সমস্যা: {str(e)}', 'danger')
+
+    conn.close()
+    return redirect(url_for('mobile_messaging'))
 
 # 🔌 নতুন বাটন: "সংযোগ" প্যানেল রুট (এডমিন)
 @app.route('/admin/connection_status', methods=['GET', 'POST'])

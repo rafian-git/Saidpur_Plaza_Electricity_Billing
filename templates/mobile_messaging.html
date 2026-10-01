@@ -8,15 +8,24 @@
 
     <!-- মোবাইল মেসেজিং সেকশন মডিউল -->
     <div class="card shadow mb-4">
-        <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+        <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center flex-wrap gap-2">
             <h5 class="mb-0">📱 মোবাইল মেসেজিং প্যানেল</h5>
-            <!-- একসাথে সকল গ্রাহককে মেসেজ পাঠানোর বাল্ক বাটন -->
+            
+            <!-- বাল্ক মেসেজ অ্যাকশন বাটনসমূহ (শুধুমাত্র এডমিনের জন্য) -->
             {% if session.get('role') == 'admin' %}
-            <form action="{{ url_for('send_message') }}" method="POST" class="d-inline">
-                <input type="hidden" name="action_type" value="bulk">
-                <input type="hidden" name="bulk_type" value="billing">
-                <button type="submit" class="btn btn-sm btn-light fw-bold" onclick="return confirm('সকল গ্রাহককে একসাথে বিলিং মেসেজ পাঠাতে চান?');">📥 সবাইকে বিলিং মেসেজ পাঠান</button>
-            </form>
+            <div class="d-flex gap-2">
+                <!-- ১. সবাইকে বিলিং মেসেজ পাঠানোর বাল্ক বাটন -->
+                <form action="{{ url_for('send_message') }}" method="POST" class="d-inline">
+                    <input type="hidden" name="action_type" value="bulk">
+                    <input type="hidden" name="bulk_type" value="billing">
+                    <button type="submit" class="btn btn-sm btn-light fw-bold" onclick="return confirm('সকল গ্রাহককে একসাথে বিলিং মেসেজ পাঠাতে চান?');">📥 সবাইকে বিলিং মেসেজ পাঠান</button>
+                </form>
+
+                <!-- ২. সবাইকে কাস্টম মেসেজ পাঠানোর বাল্ক বাটন -->
+                <button type="button" class="btn btn-sm btn-warning fw-bold" data-bs-toggle="modal" data-bs-target="#bulkCustomMsgModal">
+                    💬 সবাইকে কাস্টম মেসেজ পাঠান
+                </button>
+            </div>
             {% endif %}
         </div>
         <div class="card-body">
@@ -104,4 +113,36 @@
         </div>
     </div>
 </div>
+
+<!-- সকলকে কাস্টম মেসেজ পাঠানোর মডাল (Modal) -->
+{% if session.get('role') == 'admin' %}
+<div class="modal fade" id="bulkCustomMsgModal" tabindex="-1" aria-labelledby="bulkCustomMsgModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <form action="{{ url_for('send_message') }}" method="POST">
+            <div class="modal-content">
+                <div class="modal-header bg-warning text-dark">
+                    <h5 class="modal-title" id="bulkCustomMsgModalLabel">⚠️ সকল গ্রাহককে কাস্টম মেসেজ পাঠান</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body text-start">
+                    <input type="hidden" name="action_type" value="bulk">
+                    <input type="hidden" name="bulk_type" value="custom">
+                    
+                    <div class="mb-3">
+                        <label for="bulk_custom_text" class="form-label fw-bold">কাস্টম মেসেজের বিবরণ লিখুন:</label>
+                        <textarea class="form-control" id="bulk_custom_text" name="custom_text" rows="4" placeholder="এখানে আপনার বার্তাটি লিখুন যা সকল গ্রাহকের কাছে একসাথে চলে যাবে..." required></textarea>
+                    </div>
+                    <div class="alert alert-info py-2 mb-0" style="font-size: 13px;">
+                        <i class="fas fa-info-circle"></i> এই মেসেজটি ডাটাবেসে থাকা মোবাইল নম্বরযুক্ত সকল সক্রিয় গ্রাহকের কাছে একসাথে চলে যাবে। সাবমিট করার পর একটু অপেক্ষা করুন।
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">বাতিল</button>
+                    <button type="submit" class="btn btn-warning btn-sm fw-bold" onclick="return confirm('সত্যিই কি সকল গ্রাহককে এই কাস্টম মেসেজটি পাঠাতে চান?');">সকলকে পাঠিয়ে দিন</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{% endif %}
 {% endblock %}

@@ -1,0 +1,182 @@
+{% extends 'base.html' %}
+
+{% block title %}নতুন আইডি কার্ড ও সদস্য যুক্ত করুন - সৈয়দপুর প্লাজা{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4">
+    <div class="d-flex justify-content-between align-items-center mt-4 mb-4">
+        <div>
+            <h2 class="fw-bold text-dark">
+                {% if category == 'staff' %}🟢 নতুন স্টাফ ইনপুট ফর্ম{% elif category == 'merchant' %}🔵 নতুন ব্যবসায়ী ইনপুট ফর্ম{% else %}🟡 নতুন কর্মচারী ইনপুট ফর্ম{% endif %}
+            </h2>
+            <p class="text-muted">সৈয়দপুর প্লাজার আইডি কার্ড ও এক্সেস ম্যানেজমেন্টের জন্য তথ্য পূরণ করুন।</p>
+        </div>
+        <a href="{{ url_for('id_card_management', category=category) }}" class="btn btn-secondary fw-bold">
+            ⬅️ তালিকায় ফিরে যান
+        </a>
+    </div>
+
+    <div class="card shadow border-0 rounded-4 mb-5">
+        <div class="card-body p-4">
+            <form action="{{ url_for('add_id_card', category=category) }}" method="POST" enctype="multipart/form-data">
+                
+                <!-- ১. সাধারণ তথ্য -->
+                <h5 class="fw-bold text-primary mb-3">১. সাধারণ তথ্য</h5>
+                <div class="row g-3 mb-4">
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold">আইডি নাম্বার (Card ID) <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" name="card_id" placeholder="যেমন: STF-101 বা MCH-201" required>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold">পূর্ণ নাম <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" name="name" placeholder="নাম লিখুন" required>
+                    </div>
+                    
+                    {% if category == 'staff' %}
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold text-success">পদবী (Designation) <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" name="designation" placeholder="যেমন: ম্যানেজার / টেকনিশিয়ান">
+                    </div>
+                    {% endif %}
+
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold">মোবাইল নাম্বার <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" name="mobile_no" placeholder="01XXXXXXXXX" required>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold">দোকান নাম্বার (যদি থাকে)</label>
+                        <input type="text" class="form-control" name="shop_no" placeholder="যেমন: Shop # 45">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold">রক্তের গ্রুপ</label>
+                        <select class="form-select" name="blood_group">
+                            <option value="">নির্বাচন করুন</option>
+                            <option value="A+">A+</option><option value="A-">A-</option>
+                            <option value="B+">B+</option><option value="B-">B-</option>
+                            <option value="AB+">AB+</option><option value="AB-">AB-</option>
+                            <option value="O+">O+</option><option value="O-">O-</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold">পিতার নাম</label>
+                        <input type="text" class="form-control" name="father_name" placeholder="পিতার নাম">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold">মাতার নাম</label>
+                        <input type="text" class="form-control" name="mother_name" placeholder="মাতার নাম">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold">এনআইডি / জন্ম সনদ নাম্বার</label>
+                        <input type="text" class="form-control" name="nid_or_birth" placeholder="নম্বর লিখুন">
+                    </div>
+                </div>
+
+                <hr class="mb-4">
+
+                <!-- ২. ঠিকানা -->
+                <h5 class="fw-bold text-primary mb-3">২. ঠিকানা বিবরণ</h5>
+                <div class="row g-3 mb-4">
+                    <!-- বর্তমান ঠিকানা -->
+                    <div class="col-md-6">
+                        <div class="p-3 border rounded bg-light">
+                            <h6 class="fw-bold text-dark mb-3">বর্তমান ঠিকানা</h6>
+                            <div class="mb-2">
+                                <label class="form-label small fw-bold">গ্রাম / মহল্লা</label>
+                                <input type="text" class="form-control" name="pres_village" placeholder="গ্রাম/মহল্লা">
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label small fw-bold">ডাকঘর</label>
+                                <input type="text" class="form-control" name="pres_post" placeholder="ডাকঘর">
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label small fw-bold">থানা / উপজেলা</label>
+                                <input type="text" class="form-control" name="pres_upazila" placeholder="থানা/উপজেলা">
+                            </div>
+                            <div>
+                                <label class="form-label small fw-bold">জেলা</label>
+                                <input type="text" class="form-control" name="pres_district" placeholder="জেলা">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- স্থায়ী ঠিকানা -->
+                    <div class="col-md-6">
+                        <div class="p-3 border rounded bg-light">
+                            <h6 class="fw-bold text-dark mb-3">স্থায়ী ঠিকানা</h6>
+                            <div class="mb-2">
+                                <label class="form-label small fw-bold">গ্রাম / মহল্লা</label>
+                                <input type="text" class="form-control" name="perm_village" placeholder="গ্রাম/মহল্লা">
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label small fw-bold">ডাকঘর</label>
+                                <input type="text" class="form-control" name="perm_post" placeholder="ডাকঘর">
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label small fw-bold">থানা / উপজেলা</label>
+                                <input type="text" class="form-control" name="perm_upazila" placeholder="থানা/উপজেলা">
+                            </div>
+                            <div>
+                                <label class="form-label small fw-bold">জেলা</label>
+                                <input type="text" class="form-control" name="perm_district" placeholder="জেলা">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <hr class="mb-4">
+
+                <!-- ৩. ছবি, স্বাক্ষর এবং ফিঙ্গারপ্রিন্ট ইনপুট -->
+                <h5 class="fw-bold text-primary mb-3">৩. ছবি, স্বাক্ষর ও ফিঙ্গারপ্রিন্ট বায়োমেট্রিক</h5>
+                <div class="row g-3 mb-4">
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">স্ট্যাম্প সাইজের ছবি আপলোড</label>
+                        <input type="file" class="form-control" name="photo_img" accept="image/*">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">স্বাক্ষর আপলোড</label>
+                        <input type="file" class="form-control" name="signature_img" accept="image/*">
+                    </div>
+                    <div class="mb-3">
+                        <label for="authorized_signature" class="form-label fw-bold">ইস্যুকারী/অথোরাইজড স্বাক্ষর (Authorized Signature)</label>
+                        <input type="file" class="form-control" id="authorized_signature" name="authorized_signature" accept="image/*">
+                        <div class="form-text">আইডি কার্ডের নিচে ব্যবহারের জন্য অথরিটি বা ম্যানেজমেন্টের স্বাক্ষরের ছবি আপলোড করুন।</div>
+                    </div>
+                    <div class="col-12">
+                        <div class="p-3 border rounded bg-light">
+                            <label class="form-label fw-bold text-danger mb-2">ফিঙ্গারপ্রিন্ট স্ক্যানার কানেকশন (দুই হাত: বৃদ্ধাঙ্গুলী ও তর্জনী)</label>
+                            <div class="row g-2">
+                                <div class="col-md-3"><button type="button" class="btn btn-outline-dark w-100 fw-bold" onclick="alert('বায়োমেট্রিক ফিঙ্গারপ্রিন্ট স্ক্যানার স্ক্যান করার জন্য প্রস্তুত।')">👉 ডান হাতের বৃদ্ধাঙ্গুলী</button></div>
+                                <div class="col-md-3"><button type="button" class="btn btn-outline-dark w-100 fw-bold" onclick="alert('বায়োমেট্রিক ফিঙ্গারপ্রিন্ট স্ক্যানার স্ক্যান করার জন্য প্রস্তুত।')">👉 ডান হাতের তর্জনী</button></div>
+                                <div class="col-md-3"><button type="button" class="btn btn-outline-dark w-100 fw-bold" onclick="alert('বায়োমেট্রিক ফিঙ্গারপ্রিন্ট স্ক্যানার স্ক্যান করার জন্য প্রস্তুত।')">👈 বাম হাতের বৃদ্ধাঙ্গুলী</button></div>
+                                <div class="col-md-3"><button type="button" class="btn btn-outline-dark w-100 fw-bold" onclick="alert('বায়োমেট্রিক ফিঙ্গারপ্রিন্ট স্ক্যানার স্ক্যান করার জন্য প্রস্তুত।')">👈 বাম হাতের তর্জনী</button></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <hr class="mb-4">
+
+                <!-- ৪. সিকিউরিটি, পাঞ্চ কার্ড ও মেয়াদ -->
+                <h5 class="fw-bold text-primary mb-3">৪. সিকিউরিটি ও মেয়াদ উত্তীর্ণের তারিখ</h5>
+                <div class="row g-3 mb-4">
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">আইডি কার্ডের গোপন পাঞ্চ নাম্বার (Secret Card Number)</label>
+                        <input type="text" class="form-control" name="secret_card_number" placeholder="গোপন কোড লিখুন">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold text-danger">মেয়াদ উত্তীর্ণের তারিখ (Expire Date) <span class="text-danger">*</span></label>
+                        <input type="date" class="form-control" name="expire_date" required>
+                    </div>
+                </div>
+
+                <div class="text-end">
+                    <button type="submit" class="btn btn-success btn-lg px-5 fw-bold shadow">
+                        💾 তথ্য সংরক্ষণ করুন
+                    </button>
+                </div>
+
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

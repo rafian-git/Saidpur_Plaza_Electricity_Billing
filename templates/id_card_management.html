@@ -1,0 +1,111 @@
+{% extends 'base.html' %}
+
+{% block title %}আইডি কার্ড ম্যানেজমেন্ট - সৈয়দপুর প্লাজা{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4">
+    <div class="d-flex justify-content-between align-items-center mt-4 mb-4">
+        <div>
+            <h2 class="fw-bold text-dark">🪪 আইডি কার্ড ও অ্যাক্সেস ম্যানেজমেন্ট</h2>
+            <p class="text-muted">স্টাফ, ব্যবসায়ী এবং কর্মচারীদের ফিঙ্গারপ্রিন্ট, আইডি ও পেমেন্ট অ্যাক্সেস নিয়ন্ত্রণ করুন।</p>
+        </div>
+        <!-- নতুন ইনপুট বা অ্যাড করার বাটন -->
+        <a href="{{ url_for('add_id_card', category=current_category) }}" class="btn btn-primary btn-lg fw-bold shadow-sm">
+            ➕ নতুন সদস্য যুক্ত করুন
+        </a>
+        <a href="{{ url_for('view_access_logs') }}" class="btn btn-dark fw-bold">
+            🚪 অ্যাক্সেস লগ ও এন্ট্রি হিস্ট্রি
+        </a>
+    </div>
+
+    <!-- ক্যাটাগরি ট্যাব বা সুইচিং বাটন -->
+    <ul class="nav nav-pills mb-4 gap-2">
+        <li class="nav-item">
+            <a class="nav-link fw-bold px-4 py-2 {% if current_category == 'staff' %}active bg-success text-white{% else %}bg-light text-dark{% endif %}" 
+               href="{{ url_for('id_card_management', category='staff') }}">
+               🟢 স্টাফ ম্যানেজমেন্ট
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link fw-bold px-4 py-2 {% if current_category == 'merchant' %}active bg-primary text-white{% else %}bg-light text-dark{% endif %}" 
+               href="{{ url_for('id_card_management', category='merchant') }}">
+               🔵 ব্যবসায়ী ম্যানেজমেন্ট
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link fw-bold px-4 py-2 {% if current_category == 'employee' %}active bg-warning text-dark{% else %}bg-light text-dark{% endif %}" 
+               href="{{ url_for('id_card_management', category='employee') }}">
+               🟡 কর্মচারী ম্যানেজমেন্ট
+            </a>
+        </li>
+    </ul>
+
+    <!-- মূল ডাটা টেবিল কার্ড -->
+    <div class="card shadow border-0 rounded-4 mb-4">
+        <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center py-3">
+            <h5 class="mb-0 text-uppercase fw-bold">
+                {% if current_category == 'staff' %}স্টাফ তালিকা{% elif current_category == 'merchant' %}ব্যবসায়ী তালিকা{% else %}কর্মচারী তালিকা{% endif %}
+            </h5>
+            <span class="badge bg-light text-dark px-3 py-2 fs-6">মোট রেকর্ড: {{ cards|length }}</span>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle table-bordered">
+                    <thead class="table-light text-center">
+                        <tr>
+                            <th>ছবি</th>
+                            <th>আইডি নম্বর</th>
+                            <th>নাম</th>
+                            {% if current_category == 'staff' %}<th>পদবী</th>{% endif %}
+                            <th>মোবাইল নম্বর</th>
+                            <th>দোকান নং</th>
+                            <th>রক্তের গ্রুপ</th>
+                            <th>মেয়াদ উত্তীর্ণ</th>
+                            <th>অ্যাকশন</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for c in cards %}
+                        <tr class="text-center">
+                            <td>
+                                {% if c.photo_img %}
+                                    <img src="{{ url_for('static', filename='uploads/' + c.photo_img) }}" class="rounded-circle border" width="45" height="45" style="object-fit: cover;">
+                                {% else %}
+                                    <span class="badge bg-secondary">ছবি নেই</span>
+                                {% endif %}
+                            </td>
+                            <td class="fw-bold text-primary">{{ c.card_id }}</td>
+                            <td class="fw-bold text-start">{{ c.name }}</td>
+                            {% if current_category == 'staff' %}<td>{{ c.designation or '-' }}</td>{% endif %}
+                            <td>{{ c.mobile_no }}</td>
+                            <td>{{ c.shop_no or '-' }}</td>
+                            <td><span class="badge bg-danger">{{ c.blood_group }}</span></td>
+                            <td><span class="badge bg-info text-dark">{{ c.expire_date or '-' }}</span></td>
+                            <td>
+                                <div class="btn-group" role="group">
+                                    <!-- প্রিন্ট আইডি কার্ড বাটন -->
+                                    <a href="#" class="btn btn-outline-dark btn-sm" title="আইডি কার্ড প্রিন্ট">🖨️</a>
+                                    <!-- এডিট বাটন -->
+                                    <a href="#" class="btn btn-outline-primary btn-sm" title="তথ্য এডিট">✏️</a>
+                                    <!-- ডিলিট বা অ্যাক্সেস বাতিল বাটন -->
+                                    <form action="{{ url_for('delete_id_card', id=c.id) }}" method="POST" class="d-inline" onsubmit="return confirm('আপনি কি নিশ্চিত এই কার্ডধারীর অ্যাক্সেস ও রেকর্ড মুছে ফেলতে চান?');">
+                                        <button type="submit" class="btn btn-outline-danger btn-sm rounded-0 rounded-end" title="বাতিল/ডিলিট">🗑️</button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="{% if current_category == 'staff' %}9{% else %}8{% endif %}" class="text-center text-muted py-5">
+                                <div class="fs-4 mb-2">📂</div>
+                                এই ক্যাটাগরিতে বর্তমানে কোনো তথ্য ইনপুট করা হয়নি। "নতুন সদস্য যুক্ত করুন" বাটনে ক্লিক করে তথ্য যোগ করুন।
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

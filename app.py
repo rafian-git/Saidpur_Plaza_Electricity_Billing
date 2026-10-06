@@ -4,6 +4,8 @@ import sqlite3
 import qrcode
 import base64
 from io import BytesIO
+from io import StringIO
+from flask import make_response
 import io
 import math
 from flask import Flask, render_template, request, redirect, url_for, session, flash, Response, abort
@@ -15,6 +17,7 @@ from functools import wraps
 from flask import session, flash, redirect, url_for
 from flask import send_file, request
 import requests
+from flask import request, jsonify
 
 # প্রজেক্টের মেইন ডিরেক্টরি সেটআপ
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -223,7 +226,55 @@ def init_db():
             timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     ''')
-        
+
+    # আইডি কার্ড ম্যানেজমেন্টের টেবিল
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS id_cards (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            category TEXT NOT NULL,
+            card_id TEXT UNIQUE NOT NULL,
+            name TEXT NOT NULL,
+            designation TEXT,
+            mobile_no TEXT,
+            shop_no TEXT,
+            blood_group TEXT,
+            father_name TEXT,
+            mother_name TEXT,
+            nid_or_birth TEXT,
+            pres_village TEXT,
+            pres_post TEXT,
+            pres_upazila TEXT,
+            pres_district TEXT,
+            perm_village TEXT,
+            perm_post TEXT,
+            perm_upazila TEXT,
+            perm_district TEXT,
+            signature_img TEXT,
+            photo_img TEXT,
+            fp_right_thumb TEXT,
+            fp_right_index TEXT,
+            fp_left_thumb TEXT,
+            fp_left_index TEXT,
+            secret_card_number TEXT,
+            expire_date DATE,
+            authorized_signature TEXT
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS access_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            device_id TEXT,          -- কোন গেট বা মেশিনের আইডি (যেমন: Gate-1)
+            card_id TEXT,            -- সদস্যের আইডি নাম্বার
+            name TEXT,               -- সদস্যের নাম
+            category TEXT,           -- staff, merchant, employee
+            status TEXT,             -- 'Granted' (অনুমোদিত) অথবা 'Denied' (প্রত্যাখ্যাত)
+            reason TEXT,             -- কারণ (যেমন: Valid, Expired Card, Not Found)
+            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+
     # ইউজার টেবিল বা অন্য ডিফল্ট ডাটা ইনসার্ট করার কাজ এখানে থাকবে...
     users = [
         ('admin', '123456', 'admin'),
@@ -1815,6 +1866,212 @@ def customer_change_password():
         conn.close()
 
     return render_template('customer_change_password.html')
+
+# ১. ম্যানেজমেন্ট হোম পেজ (যেখানে তিনটি ক্যাটাগরি বা ট্যাব থাকবে)
+@app.route('/id_card_management/<category>')
+@role_required(['admin'])
+def id_card_management(category):
+    if category not in ['staff', 'merchant', 'employee']:
+        flash('অ বৈধ ক্যাটাগরি!', 'danger')
+        return redirect(url_for('dashboard'))
+    
+    conn = get_db_connection()
+    cards = conn.execute("SELECT * FROM id_cards WHERE category = ? ORDER BY id DESC", (category,)).fetchall()
+    conn.close()
+    
+    return render_template('id_card_management.html', cards=cards, current_category=category)
+
+
+# ২. নতুন আইডি কার্ড বা ব্যক্তি ইনপুট ফর্ম (Add)
+@app.route('/id_card/add/<category>', methods=['GET', 'POST'])
+@role_required(['admin'])
+def add_id_card(category):
+    if request.method == 'POST':
+        # ফর্ম থেকে ডাটা সংগ্রহ
+        card_id = request.form.get('card_id')
+        name = request.form.get('name')
+        designation = request.form.get('designation', '') if category == 'staff' else ''
+        mobile_no = request.form.get('mobile_no')
+        shop_no = request.form.get('shop_no')
+        blood_group = request.form.get('blood_group')
+        father_name = request.form.get('father_name')
+        mother_name = request.form.get('mother_name')
+        nid_or_birth = request.form.get('nid_or_birth')
+        
+        # ঠিকানা
+        pres_village = request.form.get('pres_village')
+        pres_post = request.form.get('pres_post')
+        pres_upazila = request.form.get('pres_upazila')
+        pres_district = request.form.get('pres_district')
+        
+        perm_village = request.form.get('perm_village')
+        perm_post = request.form.get('perm_post')
+        perm_upazila = request.form.get('perm_upazila')
+        perm_district = request.form.get('perm_district')
+        
+        secret_card_number = request.form.get('secret_card_number')
+        expire_date = request.form.get('expire_date')
+        
+        # ছবি এবং স্বাক্ষর আপলোড হ্যান্ডলিং
+        photo = request.files.get('photo_img')
+        signature = request.files.get('signature_img')
+        auth_sig = request.files.get('authorized_signature')
+        
+        photo_filename = ''
+        signature_filename = ''
+        auth_sig_filename = ''
+        
+        if photo and photo.filename:
+            photo_filename = secure_filename(f"photo_{card_id}_{photo.filename}")
+            photo.save(os.path.join('static/uploads', photo_filename))
+            
+        if signature and signature.filename:
+            signature_filename = secure_filename(f"sig_{card_id}_{signature.filename}")
+            signature.save(os.path.join('static/uploads', signature_filename))
+
+        if auth_sig and auth_sig.filename:
+            auth_sig_filename = secure_filename(f"auth_sig_{card_id}_{auth_sig.filename}")
+            auth_sig.save(os.path.join('static/uploads', auth_sig_filename))
+
+        conn = get_db_connection()
+        try:
+            conn.execute('''
+                INSERT INTO id_cards (
+                    category, card_id, name, designation, mobile_no, shop_no, blood_group, 
+                    father_name, mother_name, nid_or_birth, pres_village, pres_post, 
+                    pres_upazila, pres_district, perm_village, perm_post, perm_upazila, 
+                    perm_district, signature_img, photo_img, secret_card_number, expire_date
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                category, card_id, name, designation, mobile_no, shop_no, blood_group,
+                father_name, mother_name, nid_or_birth, pres_village, pres_post,
+                pres_upazila, pres_district, perm_village, perm_post, perm_upazila,
+                perm_district, signature_filename, photo_filename, secret_card_number, expire_date
+            ))
+            conn.commit()
+            flash('সফলভাবে নতুন আইডি কার্ডের তথ্য সংরক্ষণ করা হয়েছে!', 'success')
+        except Exception as e:
+            flash(f'এরর: {str(e)}', 'danger')
+        finally:
+            conn.close()
+            
+        return redirect(url_for('id_card_management', category=category))
+        
+    return render_template('add_id_card.html', category=category)
+
+
+# ৩. ডিলিট অপশন (চাকরি বা ব্যবসা ছাড়লে সীমাবদ্ধ করতে)
+@app.route('/id_card/delete/<int:id>', methods=['POST'])
+@role_required(['admin'])
+def delete_id_card(id):
+    conn = get_db_connection()
+    card = conn.execute("SELECT category FROM id_cards WHERE id = ?", (id,)).fetchone()
+    category = card['category'] if card else 'staff'
+    
+    conn.execute("DELETE FROM id_cards WHERE id = ?", (id,))
+    conn.commit()
+    conn.close()
+    
+    flash('সফলভাবে রেকর্ড মুছে ফেলা হয়েছে এবং প্লাজায় প্রবেশাধিকার বাতিল করা হয়েছে।', 'success')
+    return redirect(url_for('id_card_management', category=category))
+
+@app.route('/api/verify_access', methods=['POST'])
+def verify_access():
+    data = request.get_json()
+    device_id = data.get('device_id', 'Default-Gate')
+    secret_card_number = data.get('secret_card_number')  # বা ফিঙ্গারপ্রিন্ট আইডি
+    
+    conn = get_db_connection()
+    user = conn.execute("SELECT * FROM id_cards WHERE secret_card_number = ?", (secret_card_number,)).fetchone()
+    
+    today_date = datetime.now().date()
+    status = "Denied"
+    reason = "Card Not Found"
+    name = "Unknown"
+    category = "Unknown"
+    card_id = "N/A"
+    
+    if user:
+        user_dict = dict(user)
+        name = user_dict['name']
+        category = user_dict['category']
+        card_id = user_dict['card_id']
+        expire_date_str = user_dict['expire_date']
+        
+        # ৪. মেয়াদ উত্তীর্ণ (Expiry Date) চেক করা
+        is_expired = False
+        if expire_date_str:
+            for fmt in ('%Y-%m-%d', '%d-%m-%Y'):
+                try:
+                    exp_obj = datetime.strptime(str(expire_date_str).strip(), fmt).date()
+                    if today_date > exp_obj:
+                        is_expired = True
+                    break
+                except ValueError:
+                    continue
+        
+        if is_expired:
+            reason = "Card Expired"
+            status = "Denied"
+        else:
+            status = "Granted"
+            reason = "Access Allowed"
+    else:
+        reason = "Invalid Access Credential"
+
+    # ৫. এন্ট্রি বা লগ ডাটাবেসে সেভ করা
+    conn.execute('''
+        INSERT INTO access_logs (device_id, card_id, name, category, status, reason)
+        VALUES (?, ?, ?, ?, ?, ?)
+    ''', (device_id, card_id, name, category, status, reason))
+    conn.commit()
+    conn.close()
+    
+    # মেশিনের জন্য JSON রেসপন্স (মেশিন এই রেসপন্স পেলে রিলের মাধ্যমে দরজা খুলবে)
+    return jsonify({
+        "status": status,
+        "message": reason,
+        "name": name,
+        "category": category
+    })
+
+@app.route('/access_logs')
+@role_required(['admin', 'moderator', 'viewer'])
+def view_access_logs():
+    conn = get_db_connection()
+    
+    # ফর্ম থেকে ফিল্টার বা ডাউনলোড প্যারামিটার নেওয়া
+    start_date = request.args.get('start_date', '')
+    end_date = request.args.get('end_date', '')
+    filter_type = request.args.get('filter_type', '') # 'daily', 'monthly', অথবা 'custom'
+    action = request.args.get('action', '') # 'view' অথবা 'download'
+
+    query = "SELECT * FROM access_logs WHERE 1=1"
+    params = []
+
+    if start_date and end_date:
+        query += " AND DATE(timestamp) BETWEEN ? AND ?"
+        params.extend([start_date, end_date])
+
+    query += " ORDER BY id DESC"
+    logs = conn.execute(query, params).fetchall()
+
+    # যদি ডাউনলোড করতে চায় (CSV ফরম্যাটে)
+    if action == 'download':
+        si = StringIO()
+        cw = csv.writer(si)
+        cw.writerow(['ID', 'Timestamp', 'Device ID', 'Card ID', 'Name', 'Category', 'Status', 'Reason'])
+        for row in logs:
+            cw.writerow([row['id'], row['timestamp'], row['device_id'], row['card_id'], row['name'], row['category'], row['status'], row['reason']])
+        
+        output = make_response(si.getvalue())
+        output.headers["Content-Disposition"] = "attachment; filename=access_logs_report.csv"
+        output.headers["Content-type"] = "text/csv"
+        conn.close()
+        return output
+
+    conn.close()
+    return render_template('access_logs.html', logs=logs, start_date=start_date, end_date=end_date)
 
 # 🚪 সিস্টেম লগআউট
 @app.route('/logout')

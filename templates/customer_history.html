@@ -63,7 +63,7 @@
 
     <!-- সংযোগ বিচ্ছিন্ন থাকলে ওয়ার্নিং বক্স -->
     {% if customer.connection_status == 'Disconnected' %}
-    <div class="status-alert-box text-center shadow-sm" style="background-color: #fff5f5; border: 2px dashed #dc3545; border-radius: 12px; color: #dc3545; padding: 15px; margin-bottom: 25px;">
+    <div class="status-alert-box text-center shadow-sm">
         <h5 class="fw-bold m-0">
             ⚠️ এই গ্রাহকের সংযোগ বিচ্ছিন্ন করা হয়েছে!
             {% if customer.disconnect_reason and customer.disconnect_reason.strip() != '' %}
@@ -83,7 +83,7 @@
                             <th>#</th>
                             <th>বিলের মাস</th>
                             <th>ইউনিট</th>
-                            <th>মোট প্রদেয় / পরিশোধিত</th>
+                            <th>অবশিষ্ট বকেয়া / প্রদেয় পরিমাণ</th>
                             <th>স্ট্যাটাস / রসিদ</th>
                             <th>বিশেষ নোট / কিস্তি বিবরণ</th>
                             <th>অ্যাকশন</th>
@@ -97,7 +97,11 @@
                                 <td class="text-primary fw-bold">{{ bill.bill_month }}</td>
                                 <td>{{ bill.units_consumed }}</td>
                                 <td>
-                                    <span class="text-dark fw-bold fs-6">{{ bill.payable_display }} ৳</span>
+                                    <!-- এখানে অবশিষ্ট বকেয়া (remaining_due) বসানো হয়েছে -->
+                                    <span class="text-dark fw-bold fs-6">{{ bill.remaining_due }} ৳</span>
+                                    {% if bill.paid_amount and bill.paid_amount > 0 and bill.status != 'Paid' %}
+                                        <br><small class="text-success fw-bold">(পরিশোধিত: {{ bill.paid_amount }} ৳)</small>
+                                    {% endif %}
                                     {% if bill.is_late and bill.status != 'Paid' %}
                                         <br><small class="text-danger fw-bold">(বিলম্বিত ফি সহ)</small>
                                     {% endif %}
@@ -108,12 +112,15 @@
                                         <a href="{{ url_for('download_payment_receipt', bill_id=bill.id) }}" target="_blank" class="btn btn-success btn-sm rounded-pill px-3 fw-bold mt-1">
                                             📥 রসিদ ডাউনলোড
                                         </a>
+                                    {% elif bill.status == 'Partially Paid' %}
+                                        <span class="badge bg-warning text-dark rounded-pill px-3">আংশিক পরিশোধ</span>
+                                    {% elif bill.status == 'Waived' %}
+                                        <span class="badge bg-info text-dark rounded-pill px-3">মওকুফ</span>
                                     {% else %}
                                         <span class="badge bg-danger rounded-pill px-3">বকেয়া</span>
                                     {% endif %}
                                 </td>
                                 <td>
-                                    <!-- এডমিনের লেখা নোট বা কিস্তি বিবরণ এখানে শো করবে -->
                                     {% if bill.note %}
                                         <span class="text-dark fw-bold" style="font-size: 13px;">
                                             <i class="fas fa-info-circle text-primary"></i> {{ bill.note }}

@@ -981,7 +981,7 @@ def customer_history(c_id):
 
     today_date = datetime.now().date()
     
-    # ── নতুন লজিক: একই মাসের একাধিক বিল থাকলে শুধুমাত্র সর্বশেষ (সবচেয়ে বড় ID) বিলটি রাখা ──
+    # ── একই মাসের একাধিক বিল থাকলে শুধুমাত্র সর্বশেষ (সবচেয়ে বড় ID) বিলটি রাখা ──
     seen_months = set()
     unique_raw_history = []
     for b in raw_history:
@@ -1017,6 +1017,17 @@ def customer_history(c_id):
             display_amt = math.ceil(bill_dict['total_payable']) if bill_dict.get('total_payable') else 0
             
         bill_dict['payable_display'] = display_amt
+
+        # ── নতুন সংযোজন: আংশিক পরিশোধের ক্ষেত্রে অবশিষ্ট বকেয়া (Remaining Due) হিসাব করা ──
+        paid_amt = float(bill_dict.get('paid_amount') or 0)
+        # যদি স্ট্যাটাস আংশিক পরিশোধ হয় অথবা পেইড অ্যামাউন্ট মোট প্রদেয়ের চেয়ে কম থাকে
+        if bill_dict.get('status') == 'Partially Paid' or (0 < paid_amt < display_amt):
+            bill_dict['remaining_due'] = max(0.0, display_amt - paid_amt)
+        elif bill_dict.get('status') == 'Paid':
+            bill_dict['remaining_due'] = 0.0
+        else:
+            bill_dict['remaining_due'] = display_amt
+
         history.append(bill_dict)
 
     return render_template('customer_history.html', customer=customer, history=history)
@@ -1141,36 +1152,47 @@ def admin_edit_bill(bill_id):
     try:
         t_payable = request.form.get('total_payable')
         t_after_due = request.form.get('total_payable_after_due')
-        paid_amount = request.form.get('paid_amount')
+        paid_amount = request.form.get('paid_amount') # আংশিক বা পূর্ণ পরিশোধিত টাকা
         status = request.form.get('status')
-        installment_note = request.form.get('installment_note', '') # কিস্তি বিবরণ বা বিশেষ নোট
+        installment_note = request.form.get('installment_note', '')
         
-        # রিডাইরেক্ট করার জন্য বিলের সাপেক্ষে customer_id বের করে নেওয়া
+        # বর্তমান সময় ও তারিখ (ডেইলি কালেকশনে ফিল্টার করার জন্য অত্যন্ত জরুরি)
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        
+        # রিডাইরেক্ট করার জন্য বিলের সাপেক্ষে customer_id বের করে নেওয়া
         bill_row = conn.execute("SELECT customer_id FROM bills WHERE id = ?", (bill_id,)).fetchone()
         customer_id = bill_row['customer_id'] if bill_row else None
 
-        # বিলের তথ্য, নোট এবং লক স্ট্যাটাস আপডেট করা
+        # ডাটাবেসে updated_at কলাম না থাকলে তা অটো যোগ করার সেফটি চেক
+        try:
+            conn.execute("SELECT updated_at FROM bills LIMIT 1")
+        except sqlite3.OperationalError:
+            try:
+                conn.execute("ALTER TABLE bills ADD COLUMN updated_at TEXT")
+            except Exception:
+                pass
+
+        # বিলের তথ্য, পেইড অ্যামাউন্ট, স্ট্যাটাস, নোট এবং আপডেটের তারিখ আপডেট করা
         conn.execute('''
             UPDATE bills 
-            SET total_payable = ?, total_payable_after_due = ?, paid_amount = ?, status = ?, note = ?, is_locked = 0 
+            SET total_payable = ?, total_payable_after_due = ?, paid_amount = ?, status = ?, note = ?, updated_at = ?, is_locked = 0 
             WHERE id = ?
-        ''', (t_payable, t_after_due, paid_amount, status, installment_note, bill_id))
+        ''', (t_payable, t_after_due, paid_amount, status, installment_note, current_time, bill_id))
 
-        # অডিট লগ (কে এডিট করেছে তার রেকর্ড রাখা)
+        # অডিট লগ যুক্ত করা
         conn.execute("INSERT INTO audit_log (user_id, action, details) VALUES (?, ?, ?)", 
-                    (session.get('user_id'), 'EDIT_BILL', f'বিল আইডি {bill_id} এডিট বা মওকুফ এবং নোট আপডেট করা হয়েছে'))
+                    (session.get('user_id'), 'EDIT_BILL', f'বিল আইডি {bill_id} এডিট বা আংশিক পরিশোধ/মওকুফ আপডেট করা হয়েছে'))
         
         conn.commit()
-        flash('বিলের পরিমাণ, কিস্তি নোট ও মওকুফ সফলভাবে আপডেট হয়েছে!', 'success')
+        flash('বিলের তথ্য, পরিশোধিত পরিমাণ ও কিস্তি নোট সফলভাবে আপডেট হয়েছে!', 'success')
         
     except Exception as e:
-        flash(f'এরর হয়েছে: {e}', 'danger')
+        flash(f'এরর হয়েছে: {e}', 'danger')
     finally:
-      conn.close()
+        conn.close()
 
-    # সফলভাবে আপডেট শেষে গ্রাহকের হিস্ট্রি পেজে রিডাইরেক্ট করবে
     if customer_id:
-        return redirect(url_for('customer_history', c_id=customer_id)) # এখানে customer_id এর বদলে c_id হবে
+        return redirect(url_for('customer_history', c_id=customer_id))
     return redirect(url_for('bill_collection'))
     
 # 💳 পেমেন্ট বাটন রুট
@@ -1269,9 +1291,9 @@ def bill_collection():
                     VALUES (?, ?, ?, ?, ?, ?)
                 ''', (bill_id, cust_id, input_amount, today_str, 'Cash', session['username']))
 
-                # ২. বিলস টেবিলে স্ট্যাটাস Paid আপডেট করা
+                # ২. বিলস টেবিলে স্ট্যাটাস Paid আপডেট করা এবং updated_at সেট করা
                 conn.execute('''
-                    UPDATE bills SET paid_amount=?, status='Paid', payment_date=?, payment_method=?, received_by=? 
+                    UPDATE bills SET paid_amount=?, status='Paid', payment_date=?, payment_method=?, received_by=?, updated_at=CURRENT_TIMESTAMP 
                     WHERE id=?
                 ''', (input_amount, today_str, 'Cash', session['username'], bill_id))
 
@@ -1286,22 +1308,22 @@ def bill_collection():
     conn.close()
     return render_template('bill_collection.html', bills=processed_bills, search_query=search_query)
 
-@app.route('/report/daily_collection', methods=['GET'])
+@app.route('/admin/daily_collection', methods=['GET'])
+@role_required(['admin'])
 def daily_collection():
     selected_date = request.args.get('date')
     
     conn = get_db_connection()
-    conn.row_factory = sqlite3.Row # নিশ্চিত করার জন্য যেন রো-কে ডিকশনারির মতো ব্যবহার করা যায়
+    conn.row_factory = sqlite3.Row
     
-    # যদি কোনো তারিখ সিলেক্ট করা না থাকে, তবে আজকের তারিখ ডিফল্ট ধরবে (DD-MM-YYYY ফরম্যাটে)
     if not selected_date:
-        search_date = datetime.now().strftime('%d-%m-%Y')
+        search_date = datetime.now().strftime('%Y-%m-%d')
     else:
         try:
             for fmt in ('%Y-%m-%d', '%d-%b-%Y', '%d-%m-%Y', '%d-%m-%y'):
                 try:
                     dt = datetime.strptime(selected_date, fmt)
-                    search_date = dt.strftime('%d-%m-%Y') 
+                    search_date = dt.strftime('%Y-%m-%d')
                     break
                 except ValueError:
                     continue
@@ -1310,18 +1332,34 @@ def daily_collection():
         except Exception:
             search_date = selected_date
 
-    # ✅ সমাধান: এখানে status = 'Paid' শর্ত যুক্ত করা হয়েছে, ফলে রিজেক্ট হওয়া পেমেন্ট আর আসবে না
-    collections = conn.execute("""
-        SELECT * FROM payments 
-        WHERE payment_date = ? AND status = 'Paid'
-    """, (search_date,)).fetchall()
+    # শুধুমাত্র নির্দিষ্ট তারিখের আপডেট হওয়া বা পরিশোধ/আংশিক পরিশোধ/মওকুফ হওয়া বিলগুলো নিয়ে আসা
+    try:
+        collections = conn.execute('''
+            SELECT b.*, c.owner_name, c.shop_no, c.meter_no 
+            FROM bills b 
+            JOIN customers c ON b.customer_id = c.customer_id 
+            WHERE (b.status IN ('Paid', 'Partially Paid', 'Waived', 'Pending') OR b.paid_amount > 0)
+              AND date(b.updated_at) = ?
+            ORDER BY b.id DESC
+        ''', (search_date,)).fetchall()
+    except sqlite3.OperationalError:
+        collections = conn.execute('''
+            SELECT b.*, c.owner_name, c.shop_no, c.meter_no 
+            FROM bills b 
+            JOIN customers c ON b.customer_id = c.customer_id 
+            WHERE (b.status IN ('Paid', 'Partially Paid', 'Waived', 'Pending') OR b.paid_amount > 0)
+            ORDER BY b.id DESC
+        ''').fetchall()
     
-    # পাইথন দিয়ে শুধুমাত্র সফল (Paid) কালেকশনগুলোর মোট পরিমাণ যোগ করা
-    total_collection = sum(row['amount'] for row in collections) if collections else 0.0
+    # মোট কালেকশন (পরিশোধিত বা আংশিক পরিশোধিত টাকার যোগফল)
+    total_collection = sum(row['paid_amount'] for row in collections if row['paid_amount']) if collections else 0.0
     
     conn.close()
     
-    return render_template('daily_collection.html', collections=collections, total_collection=total_collection, selected_date=search_date)
+    return render_template('daily_collection.html', 
+                           collections=collections, 
+                           total_collection=total_collection, 
+                           selected_date=search_date)
 
 # 📅 গ. মাসিক বিলের তথ্য ইনপুট বাটন
 @app.route('/bill/monthly_bill_configuration', methods=['GET', 'POST'])
@@ -1551,33 +1589,41 @@ def customer_login():
 
     return render_template('customer_login.html')
 
-@app.route('/customer/portal/dashboard')
+@app.route('/customer/dashboard')
 def customer_dashboard():
-    if 'customer_id' not in session:
+    # সেশন থেকে লগইন করা গ্রাহকের আইডি বা তথ্য বের করা
+    customer_id = session.get('customer_id') # অথবা আপনার সিস্টেমে যেভাবে সেশন হ্যান্ডেল করা হয়
+    
+    if not customer_id:
+        flash('দয়া করে প্রথমে লগইন করুন!', 'warning')
         return redirect(url_for('customer_login'))
-
+        
     conn = get_db_connection()
-    c_id = session['customer_id']
+    conn.row_factory = sqlite3.Row
+    
+    # গ্রাহকের তথ্য নিয়ে আসা
+    customer = conn.execute('SELECT * FROM customers WHERE customer_id = ?', (customer_id,)).fetchone()
+    
+    # বিলের হিস্ট্রি নিয়ে আসা (যদি আগের সেই অবশিষ্ট বকেয়া বা remaining_due লজিক এখানেও রাখতে চান)
+    raw_history = conn.execute('SELECT * FROM bills WHERE customer_id = ? ORDER BY id DESC', (customer_id,)).fetchall()
+    
+    # কনফিগ বা অন্যান্য লজিক...
+    config = conn.execute("SELECT * FROM monthly_config ORDER BY id DESC LIMIT 1").fetchone()
+    current_bill_month = config['bill_month'] if config and 'bill_month' in config.keys() else None
     
     today_date = datetime.now().date()
     
-    config = conn.execute("SELECT * FROM monthly_config ORDER BY id DESC LIMIT 1").fetchone()
-    current_bill_month = config['bill_month'] if config and 'bill_month' in config.keys() else None
-
-    cust = conn.execute('SELECT * FROM customers WHERE customer_id=?', (c_id,)).fetchone()
-    raw_bills = conn.execute('SELECT * FROM bills WHERE customer_id=? ORDER BY id DESC', (c_id,)).fetchall()
-    
-    # ── পোর্টালের বিল হিস্ট্রির জন্যও একই মাসের ডুপ্লিকেট এন্ট্রি ফিল্টার করা ──
+    # একই মাসের একাধিক বিল হ্যান্ডেল করার লজিক (প্রয়োজন হলে)
     seen_months = set()
-    unique_raw_bills = []
-    for b in raw_bills:
+    unique_raw_history = []
+    for b in raw_history:
         b_month = b['bill_month']
         if b_month not in seen_months:
             seen_months.add(b_month)
-            unique_raw_bills.append(b)
+            unique_raw_history.append(b)
 
-    bills = []
-    for b in unique_raw_bills:
+    history = []
+    for b in unique_raw_history:
         bill_dict = dict(b)
         
         due_date_str = bill_dict.get('due_date')
@@ -1603,39 +1649,22 @@ def customer_dashboard():
             display_amt = math.ceil(bill_dict['total_payable']) if bill_dict.get('total_payable') else 0
             
         bill_dict['payable_display'] = display_amt
-        bills.append(bill_dict)
-    
-    current_bill = conn.execute("SELECT * FROM bills WHERE customer_id=? AND status != 'Paid' ORDER BY id DESC LIMIT 1", (c_id,)).fetchone()
-    
-    display_amount = 0
-    if current_bill:
-        bill_dict = dict(current_bill)
-        due_date_str = bill_dict.get('due_date')
-        is_expired = False
-        
-        if due_date_str:
-            for fmt in ('%Y-%m-%d', '%d-%m-%Y'):
-                try:
-                    due_date = datetime.strptime(str(due_date_str).strip(), fmt).date()
-                    if today_date > due_date:
-                        is_expired = True
-                    break
-                except ValueError:
-                    continue
-        
-        if (is_expired or bill_dict.get('status') == 'Pending') and bill_dict.get('total_payable_after_due'):
-            display_amount = math.ceil(bill_dict['total_payable_after_due'])
+
+        # অবশিষ্ট বকেয়া (Remaining Due) হিসাব করা
+        paid_amt = float(bill_dict.get('paid_amount') or 0)
+        if bill_dict.get('status') == 'Partially Paid' or (0 < paid_amt < display_amt):
+            bill_dict['remaining_due'] = max(0.0, display_amt - paid_amt)
+        elif bill_dict.get('status') == 'Paid':
+            bill_dict['remaining_due'] = 0.0
         else:
-            display_amount = math.ceil(bill_dict['total_payable']) if bill_dict.get('total_payable') else 0
-    
+            bill_dict['remaining_due'] = display_amt
+
+        history.append(bill_dict)
+
     conn.close()
 
-    return render_template('customer_dashboard.html', 
-                           id=c_id, 
-                           name=session['customer_name'], 
-                           cust=cust, 
-                           bills=bills,
-                           display_amount=display_amount)
+    # ── অত্যন্ত জরুরি: এখানে আবশ্যিকভাবে customer=customer এবং history=history পাস করতে হবে ──
+    return render_template('customer_dashboard.html', customer=customer, history=history)
 
 @app.route('/customer/portal/view_bills')
 def customer_view_bills():
@@ -1810,7 +1839,10 @@ def submit_trxid():
     
     if not trx_id:
         flash('দয়া করে ট্রানজেকশন আইডি (TrxID) দিন।', 'danger')
-        return redirect(url_for('payment_portal'))
+        # যদি customer_id থাকে, তবে আবার পেমেন্ট কাউন্টারে ফেরত পাঠাবে
+        if customer_id:
+            return redirect(url_for('public_payment_counter', customer_id=customer_id))
+        return redirect(url_for('customer_dashboard'))
 
     conn = get_db_connection()
     
@@ -1819,7 +1851,9 @@ def submit_trxid():
     if existing_trx:
         flash('এই ট্রানজেকশন আইডি (TrxID) ইতিপূর্বে ব্যবহার করা হয়েছে!', 'danger')
         conn.close()
-        return redirect(url_for('payment_portal'))
+        if customer_id:
+            return redirect(url_for('public_payment_counter', customer_id=customer_id))
+        return redirect(url_for('customer_dashboard'))
 
     today_str = datetime.now().strftime('%d-%m-%Y')
     
@@ -1835,13 +1869,13 @@ def submit_trxid():
                 VALUES (?, ?, ?, ?, ?, ?, ?, 'Pending')
             ''', (bill_id, customer_id, amount, trx_id, today_str, 'Online/BKash', 'Online Customer'))
 
-            # ২. বিলের স্ট্যাটাস সরাসরি Paid না করে Pending রাখা, যাতে অ্যাডমিন চেক করতে পারেন
+            # ২. বিলের স্ট্যাটাস Pending রাখা এবং updated_at আপডেট করা
             conn.execute('''
-                UPDATE bills SET status='Pending' WHERE id=?
+                UPDATE bills SET status='Pending', updated_at=CURRENT_TIMESTAMP WHERE id=?
             ''', (bill_id,))
 
             conn.commit()
-            flash('আপনার পেমেন্ট আইডি সফলভাবে জমা হয়েছে। অ্যাডমিন কর্তৃক যাচাই করার পর এটি আপডেট করা হবে।', 'success')
+            flash('আপনার পেমেন্ট আইডি সফলভাবে জমা হয়েছে। অ্যাডমিন কর্তৃক যাচাই করার পর এটি আপডেট করা হবে।', 'success')
         else:
             flash('কোনো বকেয়া বিল পাওয়া যায়নি!', 'warning')
             
@@ -1850,6 +1884,10 @@ def submit_trxid():
         flash(f'ত্রুটি ঘটেছে: {str(e)}', 'danger')
     
     conn.close()
+    
+    # সফলভাবে সাবমিট শেষে কাস্টমার ড্যাশবোর্ডে বা পেমেন্ট কাউন্টারে রিডাইরেক্ট করা
+    if customer_id:
+        return redirect(url_for('public_payment_counter', customer_id=customer_id))
     return redirect(url_for('customer_dashboard'))
 
 def check_and_fix_database():
@@ -2115,6 +2153,13 @@ def logout():
     if is_customer:
         return redirect(url_for('customer_login'))
     return redirect(url_for('login'))
+
+@app.route('/customer/logout')
+def customer_logout():
+    # কাস্টমার সেশন ক্লিয়ার করা
+    session.pop('customer_id', None)
+    flash('সফলভাবে লগআউট করা হয়েছে!', 'success')
+    return redirect(url_for('customer_login'))
 
 def update_database():
     conn = sqlite3.connect('database.db')

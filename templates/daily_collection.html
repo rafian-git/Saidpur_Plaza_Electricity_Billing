@@ -25,9 +25,8 @@
     </div>
 
     <!-- মোট কালেকশন বক্স -->
-    <div class="card bg-success text-white p-3 mb-4">
-        <h4>মোট কালেকশন</h4>
-        <!-- এখানে সরাসরি টেমপ্লেট ভেরিয়েবলটি প্রিন্ট করতে হবে -->
+    <div class="card bg-success text-white p-3 mb-4 shadow-sm">
+        <h4 class="mb-1">মোট কালেকশন</h4>
         <h2>৳ {{ "%.2f"|format(total_collection) }}</h2>
     </div>
 
@@ -36,31 +35,43 @@
         <div class="card-body">
             <div class="table-responsive">
                 <table class="table table-bordered table-striped align-middle">
-                    <thead class="table-dark">
+                    <thead class="table-dark text-center">
                         <tr>
-                            <th>পেমেন্ট আইডি</th>
-                            <th>গ্রাহক আইডি</th>
-                            <th>বিল আইডি</th>
+                            <th>#</th>
+                            <th>বিলের মাস</th>
+                            <th>গ্রাহকের বিবরণ (নাম ও দোকান)</th>
                             <th>টাকার পরিমাণ</th>
-                            <th>পেমেন্টের মাধ্যম</th>
-                            <th>তারিখ ও সময়</th>
+                            <th>স্ট্যাটাস</th>
+                            <th>তারিখ ও সময়</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {% for item in collections %}
-                        <tr>
-                            <td>#PAY-{{ item.id }}</td>
-                            <td class="fw-bold">{{ item.customer_id }}</td>
-                            <td>{{ item.bill_id }}</td>
-                            <td class="text-success fw-bold">{{ item.amount }} ৳</td>
-                            <td><span class="badge bg-info text-dark">{{ item.payment_method }}</span></td>
-                            <td>{{ item.payment_date }}</td>
-                        </tr>
+                        {% if collections %}
+                            {% for item in collections %}
+                            <tr>
+                                <td class="text-center">{{ loop.index }}</td>
+                                <td class="text-center fw-bold text-primary">{{ item.bill_month }}</td>
+                                <td>{{ item.owner_name }} (দোকান: {{ item.shop_no }})</td>
+                                <td class="text-end text-success fw-bold">{{ item.paid_amount }} ৳</td>
+                                <td class="text-center">
+                                    {% if item.status == 'Paid' %}
+                                        <span class="badge bg-success px-3">পরিশোধিত</span>
+                                    {% elif item.status == 'Partially Paid' %}
+                                        <span class="badge bg-warning text-dark px-3">আংশিক পরিশোধ</span>
+                                    {% elif item.status == 'Waived' %}
+                                        <span class="badge bg-info text-dark px-3">মওকুফ (Waived)</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary px-3">{{ item.status }}</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-center">{{ item.updated_at if item.updated_at else 'N/A' }}</td>
+                            </tr>
+                            {% endfor %}
                         {% else %}
-                        <tr>
-                            <td colspan="6" class="text-center text-muted py-4">এই তারিখে কোনো কালেকশন পাওয়া যায়নি।</td>
-                        </tr>
-                        {% endfor %}
+                            <tr>
+                                <td colspan="6" class="text-center text-muted py-4 fw-bold">এই তারিখে কোনো কালেকশন বা আপডেট রেকর্ড পাওয়া যায়নি।</td>
+                            </tr>
+                        {% endif %}
                     </tbody>
                 </table>
             </div>

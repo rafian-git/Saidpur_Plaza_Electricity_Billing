@@ -91,6 +91,11 @@
                                                     <small class="text-muted">বিলম্ব ফি মওকুফ করতে চাইলে এই মান কমিয়ে মূল বিলের সমান বা জিরো করে দিতে পারেন।</small>
                                                 </div>
 
+                                                <div class="mb-3">
+                                                    <label class="form-label fw-bold">পরিশোধিত বা আংশিক পরিশোধের পরিমাণ (টাকা):</label>
+                                                    <input type="number" step="0.01" class="form-control" name="paid_amount" value="{{ bill.paid_amount }}">
+                                                </div>
+
                                                 <!-- ৩. কিস্তি বা আংশিক পেমেন্ট নোট (Installment Note) -->
                                                 <div class="mb-3">
                                                     <label class="form-label fw-bold">কিস্তি বিবরণ বা বিশেষ নোট (Installment Note):</label>

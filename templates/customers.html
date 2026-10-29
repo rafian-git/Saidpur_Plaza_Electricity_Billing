@@ -25,10 +25,14 @@
             <div class="col-md-2"><input type="number" step="0.01" name="rate_per_kw" class="form-control" placeholder="রেট/KW"></div>
             <div class="col-md-3"><input type="number" step="0.01" name="initial_reading" class="form-control" placeholder="প্রাথমিক রিডিং"></div>
             <div class="col-md-3">
-                <select name="connection_status" class="form-control" required>
+                <select name="connection_status" class="form-control" id="addStatus" required>
                     <option value="Active">সক্রিয় (Active)</option>
                     <option value="Disconnected">নিষ্ক্রিয় (Disconnected)</option>
                 </select>
+            </div>
+            <!-- সংযোগ বিচিন্নতার কারণ ইনপুট বক্স -->
+            <div class="col-md-6" id="addReasonBox">
+                <input type="text" name="disconnect_reason" class="form-control" placeholder="সংযোগ বিচিন্নতার কারণ (যেমন: বকেয়া বিল, মিটার সমস্যা ইত্যাদি)">
             </div>
             <button type="submit" class="btn btn-primary w-100 fw-bold">গ্রাহক সেভ করুন</button>
         </div>
@@ -54,6 +58,9 @@
                         <span class="badge bg-success rounded-pill">সক্রিয়</span>
                     {% else %}
                         <span class="badge bg-danger rounded-pill">নিষ্ক্রিয়</span>
+                        {% if cust.disconnect_reason %}
+                            <br><small class="text-muted">({{ cust.disconnect_reason }})</small>
+                        {% endif %}
                     {% endif %}
                 </td>
                 <td>
@@ -70,11 +77,9 @@
                             </div>
                             <div class="modal-body">
                                 <input type="hidden" name="action" value="edit">
-                                <!-- পুরানো আইডি ব্যাকএন্ডে চেনার জন্য টেমপ্লেটে রাখা হলো -->
                                 <input type="hidden" name="old_customer_id" value="{{ cust.customer_id }}">
                     
                                 <div class="row g-3">
-                                    <!-- কাস্টমার আইডি এডিট করার বক্স -->
                                     <div class="col-md-6">
                                         <label class="fw-bold">গ্রাহক আইডি</label>
                                         <input type="text" name="customer_id" class="form-control" value="{{ cust.customer_id }}" required>
@@ -117,6 +122,11 @@
                                             <option value="Active" {% if cust.connection_status == 'Active' %}selected{% endif %}>সক্রিয় (Active)</option>
                                             <option value="Disconnected" {% if cust.connection_status == 'Disconnected' %}selected{% endif %}>নিষ্ক্রিয় (Disconnected)</option>
                                         </select>
+                                    </div>
+                                    <!-- এডিট মোডালে সংযোগ বিচিন্নতার কারণ বক্স -->
+                                    <div class="col-md-12">
+                                        <label class="fw-bold">সংযোগ বিচিন্নতার কারণ (যদি নিষ্ক্রিয় হয়)</label>
+                                        <input type="text" name="disconnect_reason" class="form-control" value="{{ cust.disconnect_reason if cust.disconnect_reason else '' }}" placeholder="কারণ লিখুন...">
                                     </div>
                                 </div>
                             </div>

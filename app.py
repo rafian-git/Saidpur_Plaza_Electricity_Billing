@@ -18,6 +18,7 @@ from flask import session, flash, redirect, url_for
 from flask import send_file, request
 import requests
 from flask import request, jsonify
+from flask import render_template, make_response
 
 # প্রজেক্টের মেইন ডিরেক্টরি সেটআপ
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -305,6 +306,13 @@ def init_db():
         conn.commit()
     except Exception as e:
         pass
+
+    # customers টেবিলে disconnect_reason কলাম যোগ করার নিরাপদ কুয়েরি
+    try:
+        conn.execute("ALTER TABLE customers ADD COLUMN disconnect_reason TEXT")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass # কলামটি আগে থেকেই থাকলে ইগনোর করবে
         
     # সবশেষে একদম একবারই কানেকশন বন্ধ হবে
     conn.close()
@@ -508,24 +516,29 @@ def customers():
             c_id = request.form.get('customer_id', '').strip()
             meter = request.form.get('meter_no', '').strip()
             owner = request.form.get('owner_name', '').strip()
-            mobile = request.form.get('mobile_no', '').strip() # নতুন মোবাইল ফিল্ড
+            mobile = request.form.get('mobile_no', '').strip()
             plaza = request.form.get('plaza_name', '').strip()
             floor = request.form.get('floor_no', '').strip()
             block = request.form.get('block_no', '').strip()
             shop = request.form.get('shop_no', '').strip()
-            u_rate = float(request.form.get('unit_rate', 0))
-            load = float(request.form.get('allocated_load', 0))
-            rate_kw = float(request.form.get('rate_per_kw', 0))
-            init_r = float(request.form.get('initial_reading', 0))
+            u_rate = float(request.form.get('unit_rate', 0) or 0)
+            load = float(request.form.get('allocated_load', 0) or 0)
+            rate_kw = float(request.form.get('rate_per_kw', 0) or 0)
+            init_r = float(request.form.get('initial_reading', 0) or 0)
             status = request.form.get('connection_status', 'Active')
+            disconnect_reason = request.form.get('disconnect_reason', '').strip()
+
+            # যদি স্ট্যাটাস সক্রিয় থাকে, তবে কারণ স্বয়ংক্রিয়ভাবে ফাঁকা করে দেওয়া নিরাপদ
+            if status in ['Active', 'Connected']:
+                disconnect_reason = ''
 
             if action == 'add':
                 try:
                     conn.execute('''
                         INSERT INTO customers (customer_id, meter_no, owner_name, mobile_no, plaza_name, floor_no, block_no, shop_no,
-                                               unit_rate, allocated_load, rate_per_kw, initial_reading, connection_status)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ''', (c_id, meter, owner, mobile, plaza, floor, block, shop, u_rate, load, rate_kw, init_r, status))
+                                               unit_rate, allocated_load, rate_per_kw, initial_reading, connection_status, disconnect_reason)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (c_id, meter, owner, mobile, plaza, floor, block, shop, u_rate, load, rate_kw, init_r, status, disconnect_reason))
                     conn.commit()
                     flash('নতুন গ্রাহকের ডেটা সফলভাবে সিস্টেমে যুক্ত হয়েছে!', 'success')
                 except sqlite3.IntegrityError:
@@ -534,30 +547,21 @@ def customers():
             elif action == 'edit':
                 old_c_id = request.form.get('old_customer_id', '').strip()
                 new_c_id = request.form.get('customer_id', '').strip()
-                meter = request.form.get('meter_no', '').strip()
-                owner = request.form.get('owner_name', '').strip()
-                mobile = request.form.get('mobile_no', '').strip() # নতুন মোবাইল ফিল্ড
-                shop = request.form.get('shop_no', '').strip()
-                u_rate = float(request.form.get('unit_rate', 0))
-                load = float(request.form.get('allocated_load', 0))
-                rate_kw = float(request.form.get('rate_per_kw', 0))
-                init_r = float(request.form.get('initial_reading', 0))
-                status = request.form.get('connection_status', 'Active')
 
                 try:
                     conn.execute('''
                         UPDATE customers SET
                             customer_id=?, meter_no=?, owner_name=?, mobile_no=?, shop_no=?,
                             unit_rate=?, allocated_load=?, rate_per_kw=?, 
-                            initial_reading=?, connection_status=?
+                            initial_reading=?, connection_status=?, disconnect_reason=?
                         WHERE customer_id=?
-                    ''', (new_c_id, meter, owner, mobile, shop, u_rate, load, rate_kw, init_r, status, old_c_id))
+                    ''', (new_c_id, meter, owner, mobile, shop, u_rate, load, rate_kw, init_r, status, disconnect_reason, old_c_id))
                     conn.commit()
                     flash('গ্রাহকের তথ্য ও আইডি সফলভাবে আপডেট হয়েছে!', 'success')
                 except sqlite3.IntegrityError:
                     flash('ত্রুটি: এই নতুন গ্রাহক আইডিটি ইতিমধ্যে অন্য কারো নামে বিদ্যমান!', 'danger')
                 
-                return redirect(url_for('customers'))
+            return redirect(url_for('customers'))
             
         customers_rows = conn.execute('SELECT * FROM customers ORDER BY customer_id ASC').fetchall()
         customers = [dict(row) for row in customers_rows]
@@ -1017,6 +1021,25 @@ def customer_history(c_id):
 
     return render_template('customer_history.html', customer=customer, history=history)
 
+@app.route('/customer/download_receipt/<int:bill_id>')
+def download_payment_receipt(bill_id):
+    conn = get_db_connection()
+    # বিল এবং সংশ্লিষ্ট গ্রাহকের তথ্য নিয়ে আসা
+    bill = conn.execute('''
+        SELECT b.*, c.owner_name, c.meter_no, c.shop_no, c.plaza_name, c.mobile_no 
+        FROM bills b 
+        JOIN customers c ON b.customer_id = c.customer_id 
+        WHERE b.id = ?
+    ''', (bill_id,)).fetchone()
+    conn.close()
+    
+    if not bill or bill['status'] != 'Paid':
+        flash('রসিদটি পাওয়া যায়নি অথবা বিলটি এখনও পরিশোধিত নয়!', 'danger')
+        return redirect(url_for('customer_dashboard')) # আপনার গ্রাহক ড্যাশবোর্ডের রাউট
+        
+    # রসিদের এইচটিএমএল পেজ রেন্ডার করে রিটার্ন করা
+    return render_template('payment_receipt.html', bill=bill)
+
 @app.route('/generate_bill', methods=['POST'])
 def generate_bill():
     conn = get_db_connection()
@@ -1118,26 +1141,36 @@ def admin_edit_bill(bill_id):
     try:
         t_payable = request.form.get('total_payable')
         t_after_due = request.form.get('total_payable_after_due')
+        paid_amount = request.form.get('paid_amount')
         status = request.form.get('status')
+        installment_note = request.form.get('installment_note', '') # কিস্তি বিবরণ বা বিশেষ নোট
+        
+        # রিডাইরেক্ট করার জন্য বিলের সাপেক্ষে customer_id বের করে নেওয়া
+        bill_row = conn.execute("SELECT customer_id FROM bills WHERE id = ?", (bill_id,)).fetchone()
+        customer_id = bill_row['customer_id'] if bill_row else None
 
-        # বিলের তথ্য আপডেট করা
+        # বিলের তথ্য, নোট এবং লক স্ট্যাটাস আপডেট করা
         conn.execute('''
             UPDATE bills 
-            SET total_payable = ?, total_payable_after_due = ?, status = ?, is_locked = 0 
+            SET total_payable = ?, total_payable_after_due = ?, paid_amount = ?, status = ?, note = ?, is_locked = 0 
             WHERE id = ?
-        ''', (t_payable, t_after_due, status, bill_id))
+        ''', (t_payable, t_after_due, paid_amount, status, installment_note, bill_id))
 
         # অডিট লগ (কে এডিট করেছে তার রেকর্ড রাখা)
         conn.execute("INSERT INTO audit_log (user_id, action, details) VALUES (?, ?, ?)", 
-                    (session.get('user_id'), 'EDIT_BILL', 'বিল এডিট বা মওকুফ করা হয়েছে'))
+                    (session.get('user_id'), 'EDIT_BILL', f'বিল আইডি {bill_id} এডিট বা মওকুফ এবং নোট আপডেট করা হয়েছে'))
+        
         conn.commit()
-
-        flash('বিলের পরিমাণ ও মওকুফ সফলভাবে আপডেট হয়েছে!', 'success')
+        flash('বিলের পরিমাণ, কিস্তি নোট ও মওকুফ সফলভাবে আপডেট হয়েছে!', 'success')
+        
     except Exception as e:
-        flash(f'এরর হয়েছে: {e}', 'danger')
+        flash(f'এরর হয়েছে: {e}', 'danger')
     finally:
-        conn.close()
+      conn.close()
 
+    # সফলভাবে আপডেট শেষে গ্রাহকের হিস্ট্রি পেজে রিডাইরেক্ট করবে
+    if customer_id:
+        return redirect(url_for('customer_history', c_id=customer_id)) # এখানে customer_id এর বদলে c_id হবে
     return redirect(url_for('bill_collection'))
     
 # 💳 পেমেন্ট বাটন রুট
@@ -2083,5 +2116,18 @@ def logout():
         return redirect(url_for('customer_login'))
     return redirect(url_for('login'))
 
+def update_database():
+    conn = sqlite3.connect('database.db')
+    try:
+        # উদাহরণস্বরূপ bills টেবিলে একটি নতুন note কলাম যোগ করা
+        conn.execute("ALTER TABLE bills ADD COLUMN note TEXT")
+        conn.commit()
+        print("নতুন কলাম সফলভাবে যুক্ত করা হয়েছে!")
+    except Exception as e:
+        print("কলামটি সম্ভবত আগেই ছিল বা এরর এসেছে:", str(e))
+    finally:
+        conn.close()
+
 if __name__ == '__main__':
+    update_database()  # এখানে ফাংশনটি কল করে দিতে হবে
     app.run(debug=True, port=5000)

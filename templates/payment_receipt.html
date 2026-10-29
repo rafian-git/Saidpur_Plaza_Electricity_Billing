@@ -1,0 +1,111 @@
+{% extends 'base.html' %}
+
+{% block title %}পেমেন্ট রসিদ - সৈয়দপুর প্লাজা{% endblock %}
+
+{% block content %}
+<style>
+    .receipt-box { 
+        max-width: 700px; 
+        margin: 30px auto; 
+        background: #fff; 
+        padding: 40px; 
+        border-radius: 16px; 
+        box-shadow: 0 4px 20px rgba(0,0,0,0.08); 
+    }
+    .header-title { 
+        color: #11998e; 
+        font-weight: bold; 
+    }
+    @media print {
+        /* প্রিন্ট করার সময় নেভবার, ফুটার ও বাটনগুলো লুকিয়ে যাবে */
+        nav, footer, .no-print, .btn { 
+            display: none !important; 
+        }
+        body { 
+            background: white !important; 
+        }
+        .receipt-box { 
+            box-shadow: none !important; 
+            margin: 0 !important; 
+            padding: 10px !important; 
+            width: 100% !important; 
+            max-width: 100% !important; 
+        }
+    }
+</style>
+
+<div class="container my-4">
+    <div class="receipt-box">
+        <!-- হেডার -->
+        <div class="text-center border-bottom pb-3 mb-4">
+            <h3 class="header-title">🏢 সৈয়দপুর প্লাজা ইলেকট্রিসিটি বিলিং সিস্টেম</h3>
+            <p class="text-muted mb-1">শেহ্‌-ই-বাংলা রোড, সৈয়দপুর, নীলফামারী</p>
+            <h5 class="fw-bold text-success mt-2">✨ অফিশিয়াল পেমেন্ট রসিদ (Money Receipt)</h5>
+        </div>
+
+        <!-- গ্রাহক ও বিলের তথ্য -->
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <p class="mb-1"><strong>গ্রাহকের নাম:</strong> {{ bill.owner_name }}</p>
+                <p class="mb-1"><strong>গ্রাহক আইডি:</strong> {{ bill.customer_id }}</p>
+                <p class="mb-1"><strong>মিটার নম্বর:</strong> {{ bill.meter_no }}</p>
+                <p class="mb-1"><strong>দোকান নম্বর:</strong> {{ bill.shop_no }} (ফ্লোর: {{ bill.floor_no }})</p>
+            </div>
+            <div class="col-md-6 text-md-end">
+                <p class="mb-1"><strong>বিলের মাস:</strong> {{ bill.bill_month }}</p>
+                <p class="mb-1"><strong>পেমেন্টের স্ট্যাটাস:</strong> <span class="badge bg-success">পরিশোধিত (Paid)</span></p>
+                <p class="mb-1"><strong>তারিখ:</strong> {{ bill.updated_at if bill.updated_at else 'N/A' }}</p>
+            </div>
+        </div>
+
+        <!-- টাকার বিবরণ টেবিল -->
+        <table class="table table-bordered align-middle">
+            <thead class="table-secondary text-center">
+                <tr>
+                    <th>বিবরণ</th>
+                    <th>পরিমাণ (টাকা)</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>বিদ্যুৎ বিল (মোট প্রদেয় পরিমাণ)</td>
+                    <td class="text-end fw-bold">{{ bill.total_payable }} ৳</td>
+                </tr>
+                <tr>
+                    <td>পরিশোধিত পরিমাণ</td>
+                    <td class="text-end text-success fw-bold">{{ bill.paid_amount }} ৳</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <!-- নোট বা কিস্তি বিবরণ থাকলে -->
+        {% if bill.note %}
+        <div class="alert alert-light border mt-3">
+            <small class="text-muted d-block"><strong>বিশেষ নোট / কিস্তি বিবরণ:</strong></small>
+            <span>{{ bill.note }}</span>
+        </div>
+        {% endif %}
+
+        <!-- স্বাক্ষর অংশ -->
+        <div class="row mt-5 pt-4 border-top text-center">
+            <div class="col-6 text-start">
+                <p class="mt-4 text-muted"><small>গ্রাহকের স্বাক্ষর</small></p>
+            </div>
+            <div class="col-6 text-end">
+                <p class="border-top d-inline-block px-4 mt-4"><small>অথরাইজড সিগনেচার</small></p>
+            </div>
+        </div>
+
+        <!-- কপিরাইট ফুটার সেকশন -->
+        <footer class="text-center text-muted mt-5 mb-0 py-3 border-top">
+            <small>© ২০২৬ Wafeesoft <strong>।সর্বস্বত্ব সংরক্ষিত।</strong>. সৈয়দপুর প্লাজা বিলিং সিস্টেম.</small>
+        </footer>
+    </div>
+
+    <!-- প্রিন্ট বা ডাউনলোড বাটন -->
+    <div class="text-center mt-4 no-print">
+        <button onclick="window.print()" class="btn btn-primary fw-bold px-4">🖨️ রসিদ প্রিন্ট / ডাউনলোড করুন</button>
+        <a href="javascript:window.close();" class="btn btn-secondary fw-bold px-4 ms-2">বন্ধ করুন</a>
+    </div>
+</div>
+{% endblock %}

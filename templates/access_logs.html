@@ -4,22 +4,38 @@
     <div class="card shadow mb-4">
         <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center flex-wrap gap-2">
             <h5 class="mb-0">🚪 গেট এন্ট্রি এবং অ্যাক্সেস লগ হিস্ট্রি</h5>
-            <a href="{{ url_for('id_card_management', category='staff') }}" class="btn btn-secondary btn-sm">⬅️ পেছনে ফিরে যান</a>
+            <div class="d-flex gap-2">
+                <button onclick="window.print()" class="btn btn-outline-light btn-sm fw-bold no-print">🖨️ পেজ প্রিন্ট করুন</button>
+                <a href="{{ url_for('id_card_management', category='staff') }}" class="btn btn-secondary btn-sm no-print">⬅️ পেছনে ফিরে যান</a>
+            </div>
         </div>
         <div class="card-body">
             <!-- ফিল্টার এবং ডাউনলোড ফর্ম -->
-            <form method="GET" action="{{ url_for('view_access_logs') }}" class="row g-3 mb-4 align-items-end bg-light p-3 rounded border">
-                <div class="col-md-3">
-                    <label class="form-label fw-bold">শুরু করার তারিখ:</label>
+            <form method="GET" action="{{ url_for('view_access_logs') }}" class="row g-3 mb-4 align-items-end bg-light p-3 rounded border no-print">
+                <div class="col-md-2">
+                    <label class="form-label fw-bold small">শুরু করার তারিখ:</label>
                     <input type="date" name="start_date" class="form-control" value="{{ start_date }}">
                 </div>
-                <div class="col-md-3">
-                    <label class="form-label fw-bold">শেষ তারিখ:</label>
+                <div class="col-md-2">
+                    <label class="form-label fw-bold small">শেষ তারিখ:</label>
                     <input type="date" name="end_date" class="form-control" value="{{ end_date }}">
                 </div>
-                <div class="col-md-6 d-flex gap-2">
-                    <button type="submit" name="action" value="view" class="btn btn-primary fw-bold w-50">🔍 ফিল্টার করুন</button>
-                    <button type="submit" name="action" value="download" class="btn btn-success fw-bold w-50">📥 রিপোর্ট ডাউনলোড (CSV)</button>
+                <div class="col-md-2">
+                    <label class="form-label fw-bold small">নির্দিষ্ট গেইট/ডিভাইস:</label>
+                    <select name="gate" class="form-select">
+                        <option value="">সকল গেইট</option>
+                        {% for g in gates %}
+                            <option value="{{ g.device_id }}" {% if selected_gate == g.device_id %}selected{% endif %}>{{ g.device_id }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-bold small">কার্ড নম্বর বা নাম:</label>
+                    <input type="text" name="search" class="form-control" placeholder="আইডি বা নাম দিয়ে খুঁজুন..." value="{{ search_query }}">
+                </div>
+                <div class="col-md-3 d-flex gap-2">
+                    <button type="submit" name="action" value="view" class="btn btn-primary fw-bold w-50">🔍 ফিল্টার</button>
+                    <button type="submit" name="action" value="download" class="btn btn-success fw-bold w-50">📥 CSV</button>
                 </div>
             </form>
 
@@ -28,7 +44,7 @@
                 <table class="table table-striped table-bordered align-middle">
                     <thead class="table-secondary text-center">
                         <tr>
-                            <th>সময়</th>
+                            <th>সময়</th>
                             <th>ডিভাইস/গেট</th>
                             <th>আইডি নাম্বার</th>
                             <th>নাম</th>
@@ -40,11 +56,11 @@
                     <tbody>
                         {% for log in logs %}
                         <tr>
-                            <td>{{ log.timestamp }}</td>
-                            <td>{{ log.device_id }}</td>
-                            <td>{{ log.card_id }}</td>
+                            <td class="text-center">{{ log.timestamp }}</td>
+                            <td class="text-center"><span class="badge bg-secondary">{{ log.device_id }}</span></td>
+                            <td class="text-center fw-bold text-primary">{{ log.card_id }}</td>
                             <td>{{ log.name }}</td>
-                            <td>{{ log.category }}</td>
+                            <td class="text-center">{{ log.category }}</td>
                             <td class="text-center">
                                 {% if log.status == 'Granted' %}
                                     <span class="badge bg-success">অনুমোদিত</span>
@@ -56,7 +72,7 @@
                         </tr>
                         {% else %}
                         <tr>
-                            <td colspan="7" class="text-center text-muted py-3">কোনো এন্ট্রি লগ পাওয়া যায়নি।</td>
+                            <td colspan="7" class="text-center text-muted py-3 fw-bold">কোনো এন্ট্রি লগ পাওয়া যায়নি।</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -65,4 +81,12 @@
         </div>
     </div>
 </div>
+
+<style>
+    @media print {
+        .btn, .no-print, nav, footer { display: none !important; }
+        body { font-size: 12px; background: white !important; }
+        .card { border: none !important; box-shadow: none !important; }
+    }
+</style>
 {% endblock %}

@@ -1156,8 +1156,8 @@ def admin_edit_bill(bill_id):
         status = request.form.get('status')
         installment_note = request.form.get('installment_note', '')
         
-        # বর্তমান সময় ও তারিখ (ডেইলি কালেকশনে ফিল্টার করার জন্য অত্যন্ত জরুরি)
-        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        # বর্তমান লোকাল সময় (তারিখ ও সময়সহ) সঠিকভাবে বের করা
+        current_local_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         
         # রিডাইরেক্ট করার জন্য বিলের সাপেক্ষে customer_id বের করে নেওয়া
         bill_row = conn.execute("SELECT customer_id FROM bills WHERE id = ?", (bill_id,)).fetchone()
@@ -1172,12 +1172,12 @@ def admin_edit_bill(bill_id):
             except Exception:
                 pass
 
-        # বিলের তথ্য, পেইড অ্যামাউন্ট, স্ট্যাটাস, নোট এবং আপডেটের তারিখ আপডেট করা
+        # বিলের তথ্য, পেইড অ্যামাউন্ট, স্ট্যাটাস, নোট এবং লোকাল আপডেটের সময় আপডেট করা
         conn.execute('''
             UPDATE bills 
             SET total_payable = ?, total_payable_after_due = ?, paid_amount = ?, status = ?, note = ?, updated_at = ?, is_locked = 0 
             WHERE id = ?
-        ''', (t_payable, t_after_due, paid_amount, status, installment_note, current_time, bill_id))
+        ''', (t_payable, t_after_due, paid_amount, status, installment_note, current_local_time, bill_id))
 
         # অডিট লগ যুক্ত করা
         conn.execute("INSERT INTO audit_log (user_id, action, details) VALUES (?, ?, ?)", 
@@ -1187,6 +1187,7 @@ def admin_edit_bill(bill_id):
         flash('বিলের তথ্য, পরিশোধিত পরিমাণ ও কিস্তি নোট সফলভাবে আপডেট হয়েছে!', 'success')
         
     except Exception as e:
+        conn.rollback()
         flash(f'এরর হয়েছে: {e}', 'danger')
     finally:
         conn.close()
@@ -1194,7 +1195,7 @@ def admin_edit_bill(bill_id):
     if customer_id:
         return redirect(url_for('customer_history', c_id=customer_id))
     return redirect(url_for('bill_collection'))
-    
+
 # 💳 পেমেন্ট বাটন রুট
 @app.route('/bill/payment', methods=['GET', 'POST'])
 @role_required(['admin', 'moderator'])
@@ -1202,14 +1203,13 @@ def bill_collection():
     conn = get_db_connection()
     search_query = request.args.get('search', '')
     
-    # বর্তমান তারিখ এবং কারেন্ট বা সর্বশেষ বিল মাস কনফিগারেশন বের করা
     today_date = datetime.now().date()
     today_str = today_date.strftime('%d-%m-%Y')
     
     config = conn.execute("SELECT * FROM monthly_config ORDER BY id DESC LIMIT 1").fetchone()
     current_bill_month = config['bill_month'] if config and 'bill_month' in config.keys() else None
 
-    # কুয়েরি তৈরি (যেখানে আনপেইড বিলগুলো আনা হচ্ছে)
+    # কুয়েরি তৈরি (যেখানে বিলগুলো আনা হচ্ছে)
     if search_query:
         bills_list = conn.execute('''
             SELECT bills.*, customers.owner_name, customers.shop_no, customers.customer_id
@@ -1228,74 +1228,87 @@ def bill_collection():
     for b in bills_list:
         bill_dict = dict(b)
         
-        # .get() এর বদলে পাইথন ডিকশনারি বা সেফ চেকিং ব্যবহার করা
-        due_date_str = bill_dict.get('due_date') if isinstance(b, dict) else (b['due_date'] if 'due_date' in b.keys() else None)
+        due_date_str = bill_dict.get('due_date')
         due_date_obj = today_date
         if due_date_str:
             for fmt in ('%d-%m-%Y', '%Y-%m-%d'):
                 try:
-                    due_date_obj = datetime.strptime(due_date_str.strip(), fmt).date()
+                    due_date_obj = datetime.strptime(str(due_date_str).strip(), fmt).date()
                     break
                 except ValueError:
                     continue
         
         is_previous_month = current_bill_month and bill_dict.get('bill_month') != current_bill_month
         
+        # বিলম্বে বা সঠিক সময়ে প্রদেয় মোট টাকা নির্ধারণ
         if is_previous_month or today_date > due_date_obj:
-            bill_dict['payable_now'] = math.ceil(b['total_payable_after_due'])
+            total_due_amt = math.ceil(bill_dict['total_payable_after_due'] if bill_dict.get('total_payable_after_due') else bill_dict['total_payable'])
             bill_dict['is_late'] = True
         else:
-            bill_dict['payable_now'] = math.ceil(b['total_payable'])
+            total_due_amt = math.ceil(bill_dict['total_payable'] if bill_dict.get('total_payable') else 0)
             bill_dict['is_late'] = False
+
+        # ── অত্যন্ত জরুরি লজিক: মোট প্রদেয় থেকে ইতিমধ্যে পরিশোধিত বা আংশিক টাকা বাদ দেওয়া ──
+        already_paid = float(bill_dict.get('paid_amount') or 0)
+        bill_dict['payable_now'] = max(0.0, total_due_amt - already_paid)
+        bill_dict['already_paid'] = already_paid
 
         processed_bills.append(bill_dict)
 
     if request.method == 'POST':
         bill_id = request.form.get('bill_id')
-        
-        # ডাটাবেজ থেকে বিলের সঠিক তথ্য ফেচ করা
         bill_row = conn.execute('SELECT * FROM bills WHERE id = ?', (bill_id,)).fetchone()
         
         if bill_row:
             cust_id = bill_row['customer_id']
-            due_date_str = bill_row['due_date'] if 'due_date' in bill_row.keys() else None
+            due_date_str = bill_row['due_date']
             due_date_obj = today_date
             if due_date_str:
                 for fmt in ('%d-%m-%Y', '%Y-%m-%d'):
                     try:
-                        due_date_obj = datetime.strptime(due_date_str.strip(), fmt).date()
+                        due_date_obj = datetime.strptime(str(due_date_str).strip(), fmt).date()
                         break
                     except ValueError:
                         continue
 
             is_previous_month = current_bill_month and bill_row['bill_month'] != current_bill_month
-            
             if is_previous_month or today_date > due_date_obj:
-                actual_payable = math.ceil(bill_row['total_payable_after_due'])
+                actual_total = math.ceil(bill_row['total_payable_after_due'] if bill_row['total_payable_after_due'] else bill_row['total_payable'])
             else:
-                actual_payable = math.ceil(bill_row['total_payable'])
+                actual_total = math.ceil(bill_row['total_payable'])
                 
-            # ইউজার ইনপুট দেওয়া টাকা রিড করা
+            # পূর্বে দেওয়া আংশিক টাকা হিসাব করা
+            prev_paid = float(bill_row['paid_amount'] or 0)
+            remaining_balance = max(0.0, actual_total - prev_paid)
+
             try:
                 input_amount = float(request.form.get('pay_amount', 0))
             except ValueError:
                 input_amount = 0.0
 
-            # টাকার অংক যাচাই (সামান্য ফ্লেক্সিবল ১ টাকা ব্যবধান রাখা হয়েছে)
-            if input_amount <= 0 or abs(input_amount - actual_payable) > 1.0:
-                flash(f'ত্রুটি: সঠিক অঙ্ক বসান! প্রদেয় টাকা: {actual_payable}', 'danger')
+            # ইউজার ইনপুট দেওয়া টাকার অংক যাচাই (অবশিষ্ট বকেয়ার পরিমাণের সাথে মিল রেখে)
+            if input_amount <= 0 or input_amount > remaining_balance + 1.0:
+                flash(f'ত্রুটি: সঠিক অঙ্ক বসান! অবশিষ্ট প্রদেয় টাকা: {remaining_balance}', 'danger')
             else:
+                new_total_paid = prev_paid + input_amount
+                
+                # যদি নতুন মোট পরিশোধিত টাকা মূল বিলের সমান বা বেশি হয়, তবে স্ট্যাটাস 'Paid', অন্যথায় 'Partially Paid'
+                if new_total_paid >= actual_total - 1.0:
+                    new_status = 'Paid'
+                else:
+                    new_status = 'Partially Paid'
+
                 # ১. পেমেন্টস টেবিলে রেকর্ড ইনসার্ট করা
                 conn.execute('''
                     INSERT INTO payments (bill_id, customer_id, amount, payment_date, payment_method, received_by)
                     VALUES (?, ?, ?, ?, ?, ?)
                 ''', (bill_id, cust_id, input_amount, today_str, 'Cash', session['username']))
 
-                # ২. বিলস টেবিলে স্ট্যাটাস Paid আপডেট করা এবং updated_at সেট করা
+                # ২. বিলস টেবিলে নতুন paid_amount, স্ট্যাটাস এবং updated_at আপডেট করা
                 conn.execute('''
-                    UPDATE bills SET paid_amount=?, status='Paid', payment_date=?, payment_method=?, received_by=?, updated_at=CURRENT_TIMESTAMP 
+                    UPDATE bills SET paid_amount=?, status=?, payment_date=?, payment_method=?, received_by=?, updated_at=CURRENT_TIMESTAMP 
                     WHERE id=?
-                ''', (input_amount, today_str, 'Cash', session['username'], bill_id))
+                ''', (new_total_paid, new_status, today_str, 'Cash', session['username'], bill_id))
 
                 conn.commit()
                 flash('পেমেন্ট সফলভাবে রিসিভ হয়েছে!', 'success')
@@ -1588,6 +1601,32 @@ def customer_login():
             flash('গ্রাহক আইডি পাওয়া যায়নি!', 'danger')
 
     return render_template('customer_login.html')
+
+@app.route('/customer/forgot_password', methods=['GET', 'POST'])
+def customer_forgot_password():
+    if request.method == 'POST':
+        customer_id = request.form.get('customer_id', '').strip()
+        phone = request.form.get('phone', '').strip()
+        new_password = request.form.get('new_password', '').strip()
+        
+        conn = get_db_connection()
+        conn.row_factory = sqlite3.Row
+        
+        # গ্রাহক আইডি এবং মোবাইল নম্বর ম্যাচ করছে কি না চেক করা
+        customer = conn.execute('SELECT * FROM customers WHERE customer_id = ? AND phone = ?', (customer_id, phone)).fetchone()
+        
+        if customer:
+            # নতুন পাসওয়ার্ড আপডেট করা
+            conn.execute('UPDATE customers SET password = ? WHERE customer_id = ?', (new_password, customer_id))
+            conn.commit()
+            flash('আপনার পাসওয়ার্ড সফলভাবে পরিবর্তন করা হয়েছে। এখন নতুন পাসওয়ার্ড দিয়ে লগইন করুন।', 'success')
+            conn.close()
+            return redirect(url_for('customer_login'))
+        else:
+            flash('প্রদানকৃত গ্রাহক আইডি অথবা মোবাইল নম্বর সঠিক নয়!', 'danger')
+            conn.close()
+            
+    return render_template('customer_forgot_password.html')
 
 @app.route('/customer/dashboard')
 def customer_dashboard():
@@ -2110,11 +2149,13 @@ def verify_access():
 @role_required(['admin', 'moderator', 'viewer'])
 def view_access_logs():
     conn = get_db_connection()
+    conn.row_factory = sqlite3.Row
     
     # ফর্ম থেকে ফিল্টার বা ডাউনলোড প্যারামিটার নেওয়া
     start_date = request.args.get('start_date', '')
     end_date = request.args.get('end_date', '')
-    filter_type = request.args.get('filter_type', '') # 'daily', 'monthly', অথবা 'custom'
+    selected_gate = request.args.get('gate', '')
+    search_query = request.args.get('search', '').strip()
     action = request.args.get('action', '') # 'view' অথবা 'download'
 
     query = "SELECT * FROM access_logs WHERE 1=1"
@@ -2124,8 +2165,19 @@ def view_access_logs():
         query += " AND DATE(timestamp) BETWEEN ? AND ?"
         params.extend([start_date, end_date])
 
+    if selected_gate:
+        query += " AND device_id = ?"
+        params.append(selected_gate)
+
+    if search_query:
+        query += " AND (card_id LIKE ? OR name LIKE ?)"
+        params.extend([f'%{search_query}%', f'%{search_query}%'])
+
     query += " ORDER BY id DESC"
     logs = conn.execute(query, params).fetchall()
+
+    # ড্রপডাউনের জন্য ইউনিক গেইট বা ডিভাইস লিস্ট নিয়ে আসা
+    gates = conn.execute("SELECT DISTINCT device_id FROM access_logs WHERE device_id IS NOT NULL").fetchall()
 
     # যদি ডাউনলোড করতে চায় (CSV ফরম্যাটে)
     if action == 'download':
@@ -2142,7 +2194,7 @@ def view_access_logs():
         return output
 
     conn.close()
-    return render_template('access_logs.html', logs=logs, start_date=start_date, end_date=end_date)
+    return render_template('access_logs.html', logs=logs, gates=gates, start_date=start_date, end_date=end_date, selected_gate=selected_gate, search_query=search_query)
 
 # 🚪 সিস্টেম লগআউট
 @app.route('/logout')

@@ -41,17 +41,23 @@
             <input type="text" class="form-control form-control-lg" name="customer_id" placeholder="আপনার আইডি দিন" required autofocus autocomplete="username">
         </div>
         
-        <div class="mb-4">
+        <div class="mb-2">
             <label class="form-label fw-bold text-secondary">পাসওয়ার্ড</label>
             <div class="input-group">
                 <input type="password" class="form-control form-control-lg" name="password" id="password" placeholder="••••••••" required autocomplete="current-password">
                 <button class="btn btn-outline-secondary" type="button" onclick="togglePass()" id="toggleBtn"><i class="bi bi-eye"></i></button>
             </div>
         </div>
+
+        <!-- পাসওয়ার্ড ভুলে গেছেন? লিংক -->
+        <div class="text-end mb-4">
+            <a href="{{ url_for('customer_forgot_password') }}" class="text-decoration-none small text-danger fw-bold">পাসওয়ার্ড ভুলে গেছেন?</a>
+        </div>
         
         <button type="submit" class="btn btn-customer-login w-100 btn-lg rounded-3">পোর্টালে প্রবেশ করুন ➔</button>
     </form>
 
+    <!-- স্টাফ লগইনে ফেরার অপশন (প্রয়োজনে আনকমেন্ট করতে পারেন) -->
     <!-- <div class="text-center mt-4">
         <a href="{{ url_for('login') }}" class="text-decoration-none fw-semibold" style="color: #11998e;">← স্টাফ লগইন পাতায় ফিরুন</a>
     </div> -->
